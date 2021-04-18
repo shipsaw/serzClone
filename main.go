@@ -9,6 +9,8 @@ import (
 	"strconv"
 )
 
+const prelude string = "SERZ\x00\x00\x01\x00"
+
 // When decoded, each line of XML is unpacked into a struct; in this case it's a generic struct that can work for every XML entry type
 type Node struct {
 	XMLName xml.Name
@@ -29,8 +31,8 @@ type stackElem struct {
 }
 
 func main() {
+	// Create output buffer, write the prelude, then open and decode the xml document
 	buf := new(bytes.Buffer)
-	prelude := "SERZ\x00\x00\x01\x00"
 	err := binary.Write(buf, binary.BigEndian, []byte(prelude))
 	if err != nil {
 		fmt.Println("binary.Write failed:", err)
@@ -61,6 +63,8 @@ func main() {
 	printBin(buf)
 }
 
+// Function walk works it's way through the xml nodes, temporarily storing each element in a struct, evaluating it, then moving on
+// to the next node.
 func walk(nodes []Node, f func(Node) bool) {
 	for _, n := range nodes {
 		if f(n) {
@@ -102,6 +106,7 @@ func writeFF50(n Node, buf *bytes.Buffer) {
 		panic(err)
 	}
 
+	// Write the number of children the current element has
 	childCount := int32(len(n.Nodes))
 	err = binary.Write(buf, binary.LittleEndian, childCount)
 	if err != nil {
@@ -155,6 +160,7 @@ func writeFF56(n Node, buf *bytes.Buffer) {
 	}
 }
 
+// Print out the binary file
 func printBin(buf *bytes.Buffer) {
 	fmt.Printf("\n")
 	fmt.Printf("1   ")
@@ -167,6 +173,8 @@ func printBin(buf *bytes.Buffer) {
 	fmt.Printf("\n\n")
 }
 
+// Content has been encoded in various types, but is always a string in the xml file. This function
+// converts the string to the appropriate number type, than writes it to the buffer
 func convertContent(dType string, num string, buf *bytes.Buffer) {
 	switch dType {
 	case "bool":
