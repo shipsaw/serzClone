@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<cRecordSet d:version="1.0" d:id="282165930">
+  <Record>
+    <cDynamicEntity d:id="295239464">
+	  <Saved d:type="bool">1</Saved>
+	  <Height d:type="sFloat32" d:precision="string" d:alt_encoding="00000000625B0FC0">-3.91962</Height>
+	  <Name d:type="cDeltaString">LM Vehicle Tractor</Name>
+    </cDynamicEntity>
+  </Record>
+</cRecordSet>
+
+<!-- xmlns:d="http://www.kuju.com/TnT/2003/Delta" -->

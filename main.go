@@ -9,11 +9,23 @@ import (
 	"strconv"
 )
 
+// When decoded, each line of XML is unpacked into a struct; in this case it's a generic struct that can work for every XML entry type
 type Node struct {
 	XMLName xml.Name
 	Content []byte     `xml:",innerxml"`
 	Nodes   []Node     `xml:",any"`
 	Attrs   []xml.Attr `xml:",any,attr"`
+}
+
+// The xmlStack implements a stack to keep track of the opening and closing of split tags, and what line they were opened on
+type xmlStack struct {
+	lineNum int
+	stack   []stackElem
+}
+
+type stackElem struct {
+	lineNum  int //line number to return to
+	children int
 }
 
 func main() {
@@ -40,10 +52,13 @@ func main() {
 	walk([]Node{n}, func(n Node) bool {
 		if len(n.Nodes) > 0 {
 			writeFF50(n, buf)
+		} else {
+			writeFF56(n, buf)
 		}
 		return true
 	})
-	fmt.Printf("% x", buf.Bytes())
+
+	printBin(buf)
 }
 
 func walk(nodes []Node, f func(Node) bool) {
@@ -94,11 +109,91 @@ func writeFF50(n Node, buf *bytes.Buffer) {
 	}
 }
 
-/*
-func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	n.Attrs = start.Attr
-	type node Node
+func writeFF56(n Node, buf *bytes.Buffer) {
+	// Write the Newline sequence
+	err := binary.Write(buf, binary.BigEndian, []byte("\xFF\x56\xFF\xFF"))
+	if err != nil {
+		panic(err)
+	}
+	// Write the length of the xml element name
+	nameLen := int32(len(n.XMLName.Local))
+	err = binary.Write(buf, binary.LittleEndian, nameLen)
+	if err != nil {
+		panic(err)
+	}
+	// Write the element name
+	err = binary.Write(buf, binary.BigEndian, []byte(n.XMLName.Local))
+	if err != nil {
+		panic(err)
+	}
 
-	return d.DecodeElement((*node)(n), &start)
+	// Write the FF FF bytes, which signals this is a new attribute TODO Update this!
+	err = binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
+	if err != nil {
+		panic(err)
+	}
+
+	// Write the length of the d:type attribute
+	attrNameLen := int32(0)
+	for _, attr := range n.Attrs {
+		if attr.Name.Local == "type" {
+			tempLen := len(attr.Value)
+			attrNameLen = int32(tempLen)
+			err = binary.Write(buf, binary.LittleEndian, attrNameLen)
+			if err != nil {
+				panic(err)
+			}
+			// Write the d:type attribute value
+			err = binary.Write(buf, binary.LittleEndian, []byte(attr.Value))
+			if err != nil {
+				panic(err)
+			}
+
+			// Write the content value
+			convertContent(attr.Value, string(n.Content), buf)
+		}
+	}
 }
-*/
+
+func printBin(buf *bytes.Buffer) {
+	fmt.Printf("\n")
+	fmt.Printf("1   ")
+	for i, byt := range buf.Bytes() {
+		fmt.Printf("%02X ", byt)
+		if (i+1)%16 == 0 {
+			fmt.Printf("\n%-4d", (i+1)/16+1)
+		}
+	}
+	fmt.Printf("\n\n")
+}
+
+func convertContent(dType string, num string, buf *bytes.Buffer) {
+	switch dType {
+	case "bool":
+		if num == "0" {
+			err := binary.Write(buf, binary.LittleEndian, []byte("\x00"))
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			err := binary.Write(buf, binary.LittleEndian, []byte("\x01"))
+			if err != nil {
+				panic(err)
+			}
+		}
+	case "sFloat32":
+		flt64, err := strconv.ParseFloat(num, 32)
+		if err != nil {
+			panic(err)
+		}
+		err = binary.Write(buf, binary.LittleEndian, float32(flt64))
+		if err != nil {
+			panic(err)
+		}
+	case "cDeltaString":
+		err := binary.Write(buf, binary.LittleEndian, []byte(num))
+		if err != nil {
+			panic(err)
+		}
+	}
+}
