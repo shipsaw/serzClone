@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"container/list"
 	"encoding/binary"
 	"encoding/xml"
 	"fmt"
@@ -19,18 +20,18 @@ type Node struct {
 	Attrs   []xml.Attr `xml:",any,attr"`
 }
 
-// The xmlStack implements a stack to keep track of the opening and closing of split tags, and what line they were opened on
-type xmlStack struct {
-	lineNum int
-	stack   []stackElem
-}
-
-type stackElem struct {
-	lineNum  int //line number to return to
-	children int
+type listElem struct {
+	depth    uint16 // Line number to return to
+	children int    // Data size matches bin representation
 }
 
 func main() {
+	// Create a symbols map so that so that no names are duplicated in the bin
+	symbolMap := make(map[uint16]string)
+	fmt.Println(symbolMap)
+
+	depthList := list.New()
+
 	// Create output buffer, write the prelude, then open and decode the xml document
 	buf := new(bytes.Buffer)
 	err := binary.Write(buf, binary.BigEndian, []byte(prelude))
@@ -51,16 +52,61 @@ func main() {
 		panic(err)
 	}
 
+	var depthCounter uint16 = 0
+	var depthElem *list.Element
 	walk([]Node{n}, func(n Node) bool {
-		if len(n.Nodes) > 0 {
+		children := len(n.Nodes)
+		if children > 0 { // If an FF 50 newline
+			depthElem = depthList.PushBack(listElem{depthCounter, children})
+			printList(depthList)
+			depthCounter++
 			writeFF50(n, buf)
-		} else {
+		} else { // If an FF 56 or FF 41
 			writeFF56(n, buf)
+
+			// decrement children count
+			newElement := listElem{
+				depth:    depthElem.Value.(listElem).depth,
+				children: depthElem.Value.(listElem).children - 1,
+			}
+			depthList.Remove(depthElem)
+			depthElem = depthList.PushBack(newElement)
+			printList(depthList)
 		}
+
+		// If we have processed all the children of a parent, unwind and write FF 70, which indicates closing element
+		if depthElem.Value.(listElem).children == 0 {
+			err := binary.Write(buf, binary.BigEndian, []byte("\xFF\x70"))
+			if err != nil {
+				panic(err)
+			}
+			err = binary.Write(buf, binary.LittleEndian, int16(depthElem.Value.(listElem).depth))
+			if err != nil {
+				panic(err)
+			}
+			depthList.Remove(depthElem)
+			for elem := depthList.Back(); elem != nil && elem.Value.(listElem).children == 1; elem = elem.Prev() {
+				err = binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
+				if err != nil {
+					panic(err)
+				}
+				err = binary.Write(buf, binary.LittleEndian, int16(elem.Value.(listElem).depth))
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+
 		return true
 	})
-
 	printBin(buf)
+}
+
+func printList(depthList *list.List) {
+	for elem := depthList.Front(); elem != nil; elem = elem.Next() {
+		fmt.Printf("%v", elem.Value)
+	}
+	fmt.Printf("\n")
 }
 
 // Function walk works it's way through the xml nodes, temporarily storing each element in a struct, evaluating it, then moving on
@@ -132,6 +178,7 @@ func writeFF56(n Node, buf *bytes.Buffer) {
 		panic(err)
 	}
 
+	fmt.Println("WRITING FF FOR ATTRIBUTE" + n.XMLName.Local)
 	// Write the FF FF bytes, which signals this is a new attribute TODO Update this!
 	err = binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
 	if err != nil {
@@ -166,7 +213,7 @@ func printBin(buf *bytes.Buffer) {
 	fmt.Printf("1   ")
 	for i, byt := range buf.Bytes() {
 		fmt.Printf("%02X ", byt)
-		if (i+1)%16 == 0 {
+		if linenum := (i + 1) % 16; linenum == 0 && i+1 < len(buf.Bytes()) {
 			fmt.Printf("\n%-4d", (i+1)/16+1)
 		}
 	}
@@ -199,7 +246,20 @@ func convertContent(dType string, num string, buf *bytes.Buffer) {
 			panic(err)
 		}
 	case "cDeltaString":
-		err := binary.Write(buf, binary.LittleEndian, []byte(num))
+		// Write the FF designation TODO update this
+		err := binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
+		if err != nil {
+			panic(err)
+		}
+
+		// Write the length of the string first
+		strLen := len(num)
+		err = binary.Write(buf, binary.LittleEndian, int32(strLen))
+		if err != nil {
+			panic(err)
+		}
+		// Now write the string
+		err = binary.Write(buf, binary.BigEndian, []byte(num))
 		if err != nil {
 			panic(err)
 		}
