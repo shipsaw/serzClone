@@ -13,7 +13,7 @@ Every bin begins with the letters "SERZ"
 	If this is not the first instance of this type, then there are two byes that describe how it is linked to the previous element, than the bytes for the content.
 
 	FF 41 FF FF is a line that has no children, and the optional attribues are
-	 "d:precision d:elementType d:numElements"  The precision is always "string" and is added automatically by the converter.
+	 "d:precision d:elementType d:numElements"  numElements is the attribute that seperates it from the FF 56. The precision is always "string" and is added automatically by the converter.
 	The full formal it: FF FF 41 FF, 4 bytes to store tag name length, tag name, two that are still a mystery, than 4 content values
 
 	FF 70 XX XX is a closing tag.  Every FF 50 increases a count of how deep we are in the document.  XX XX is a 16-bit little-endian representation of the depth 
