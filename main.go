@@ -249,7 +249,7 @@ func writeFF56_41(n Node, buf *bytes.Buffer, symbolMap map[string]uint16) {
 		}
 	}
 	// Write the content value
-	convertContent(typeAttr.Value, string(n.Content), buf, symbolMap, numElements)
+	convertContent(typeAttr.Value, string(n.Content), buf, symbolMap)
 
 }
 
@@ -268,7 +268,8 @@ func printBin(buf *bytes.Buffer) {
 
 // Content has been encoded in various types, but is always a string in the xml file. This function
 // converts the string to the appropriate number type, than writes it to the buffer
-func convertContent(dType string, num string, buf *bytes.Buffer, symbolMap map[string]uint16, numElements uint8) {
+
+func convertContent(dType string, num string, buf *bytes.Buffer, symbolMap map[string]uint16) {
 	// Args will work with the case of FF 41, where there are multiple content values.  It takes the values and splits them,
 	// then loops trough the conversion switch.  If the content of the element is a string, splitting it by spaces makes
 	// no sense, so splitting is skipped
@@ -282,16 +283,15 @@ func convertContent(dType string, num string, buf *bytes.Buffer, symbolMap map[s
 	for _, arg := range args {
 		switch dType {
 		case "bool":
+			ret := make([]byte, 1)
 			if arg == "0" {
-				err := binary.Write(buf, binary.LittleEndian, []byte("\x00"))
-				if err != nil {
-					panic(err)
-				}
+				ret = []byte("\x00")
 			} else {
-				err := binary.Write(buf, binary.LittleEndian, []byte("\x01"))
-				if err != nil {
-					panic(err)
-				}
+				ret = []byte("\x01")
+			}
+			err := binary.Write(buf, binary.LittleEndian, ret)
+			if err != nil {
+				panic(err)
 			}
 		case "sFloat32":
 			flt64, err := strconv.ParseFloat(arg, 32)
