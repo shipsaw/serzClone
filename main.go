@@ -38,7 +38,7 @@ func main() {
 		fmt.Println("binary.Write failed:", err)
 	}
 
-	fileBytes, err := os.ReadFile("./test.xml")
+	fileBytes, err := os.ReadFile("test.xml")
 	if err != nil {
 		panic(err)
 	}
@@ -56,15 +56,16 @@ func main() {
 		children := len(n.Nodes)
 		if children > 0 { // If an FF 50 newline
 			depthList = append(depthList, listElem{depthCounter, children})
-			//fmt.Println(depthList)
-			depthCounter++
+			fmt.Println(depthList)
+			depthCounter++ // start tag of ff 50 counts as one line in depthCounter reference
 			writeFF50(n, buf, symbolMap)
 		} else { // If an FF 56 or FF 41
 			writeFF56_41(n, buf, symbolMap)
+			depthCounter++ //Depth counter counts lines for reference, 56 & 41 count as one line
 
-			// decrement children count
+			// decrement children count of the parent node
 			depthList[len(depthList)-1].children--
-			//fmt.Println(depthList)
+			fmt.Println(depthList)
 		}
 
 		// Check to see if we are at the end of a set of children.  If we are, unwind back to the next element with children,
@@ -72,6 +73,7 @@ func main() {
 		lastElem := depthList[len(depthList)-1]
 		if lastElem.children == 0 {
 			err := binary.Write(buf, binary.BigEndian, []byte("\xFF\x70"))
+			depthCounter++ // Closing tag counts as line in depthCounter reference
 			if err != nil {
 				panic(err)
 			}
@@ -80,9 +82,12 @@ func main() {
 				panic(err)
 			}
 			depthList = depthList[:len(depthList)-1]
+			depthList[len(depthList)-1].children--
 
 			listLen := len(depthList) - 1
-			for i := listLen; i >= 0 && depthList[i].children == 1; i-- {
+
+			// Unwind multiple-terminating tags
+			for i := listLen; i >= 0 && depthList[i].children == 0; i-- {
 				err = binary.Write(buf, binary.BigEndian, []byte("\xFF\x70"))
 				if err != nil {
 					panic(err)
@@ -92,6 +97,9 @@ func main() {
 					panic(err)
 				}
 				depthList = depthList[:len(depthList)-1]
+				if len(depthList) > 0 {
+					depthList[len(depthList)-1].children--
+				}
 			}
 		}
 

@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<cRecordSet xmlns:d="http://www.kuju.com/TnT/2003/Delta" d:version="1.0" d:id="282165930">
+<cRecordSet xmlns:d="http://www.kuju.com/TnT/2003/Delta" d:version="1.0" d:id="602267762">
 	<Record>
-		<RXAxis d:numElements="4" d:elementType="sFloat32" d:precision="string">0.6906146 0.0000000 -0.7232230 0.0000000</RXAxis>
-		<RYAxis d:numElements="4" d:elementType="sFloat32" d:precision="string">0.0000000 1.0000000 0.0000000 0.0000000</RYAxis>
-		<RZAxis d:numElements="4" d:elementType="sFloat32" d:precision="string">0.7232230 0.0000000 0.6906146 0.0000000</RZAxis>
+		<cSceneryRender>
+			<Global d:type="bool">0</Global>
+		</cSceneryRender>
+		<otherStuff>
+			<DetailLevel2 d:type="sInt32">10</DetailLevel2>
+		</otherStuff>
 	</Record>
 </cRecordSet>
