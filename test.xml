@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<cRecordSet d:version="1.0" d:id="282165930">
-  <Record>
-    <cDynamicEntity d:id="295239464">
-	  <Saved d:type="bool">1</Saved>
-	  <Height d:type="sFloat32" d:precision="string" d:alt_encoding="00000000625B0FC0">-3.91962</Height>
-	  <Name d:type="cDeltaString">LM Vehicle Tractor</Name>
-    </cDynamicEntity>
-  </Record>
+<cRecordSet xmlns:d="http://www.kuju.com/TnT/2003/Delta" d:version="1.0" d:id="282165930">
+				<cSceneryRender d:id="295291290">
+					<DetailLevel d:type="sInt32">6</DetailLevel>
+					<Global d:type="bool">0</Global>
+					<Saved d:type="bool">1</Saved>
+					<Palette0Index d:type="sUInt8">0</Palette0Index>
+					<Palette1Index d:type="sUInt8">0</Palette1Index>
+					<Palette2Index d:type="sUInt8">0</Palette2Index>
+				</cSceneryRender>
 </cRecordSet>
-
-<!-- xmlns:d="http://www.kuju.com/TnT/2003/Delta" -->

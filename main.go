@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"container/list"
 	"encoding/binary"
 	"encoding/xml"
 	"fmt"
@@ -27,10 +26,9 @@ type listElem struct {
 
 func main() {
 	// Create a symbols map so that so that no names are duplicated in the bin
-	symbolMap := make(map[uint16]string)
-	fmt.Println(symbolMap)
+	symbolMap := make(map[string]uint16)
 
-	depthList := list.New()
+	depthList := []listElem{}
 
 	// Create output buffer, write the prelude, then open and decode the xml document
 	buf := new(bytes.Buffer)
@@ -53,60 +51,53 @@ func main() {
 	}
 
 	var depthCounter uint16 = 0
-	var depthElem *list.Element
 	walk([]Node{n}, func(n Node) bool {
 		children := len(n.Nodes)
 		if children > 0 { // If an FF 50 newline
-			depthElem = depthList.PushBack(listElem{depthCounter, children})
-			printList(depthList)
+			depthList = append(depthList, listElem{depthCounter, children})
+			//fmt.Println(depthList)
 			depthCounter++
-			writeFF50(n, buf)
+			writeFF50(n, buf, symbolMap)
 		} else { // If an FF 56 or FF 41
-			writeFF56(n, buf)
+			writeFF56(n, buf, symbolMap)
 
 			// decrement children count
-			newElement := listElem{
-				depth:    depthElem.Value.(listElem).depth,
-				children: depthElem.Value.(listElem).children - 1,
-			}
-			depthList.Remove(depthElem)
-			depthElem = depthList.PushBack(newElement)
-			printList(depthList)
+			depthList[len(depthList)-1].children--
+			//fmt.Println(depthList)
 		}
 
-		// If we have processed all the children of a parent, unwind and write FF 70, which indicates closing element
-		if depthElem.Value.(listElem).children == 0 {
+		// Check to see if we are at the end of a set of children.  If we are, unwind back to the next element with children,
+		// Printing FF 70's along the way
+		lastElem := depthList[len(depthList)-1]
+		if lastElem.children == 0 {
 			err := binary.Write(buf, binary.BigEndian, []byte("\xFF\x70"))
 			if err != nil {
 				panic(err)
 			}
-			err = binary.Write(buf, binary.LittleEndian, int16(depthElem.Value.(listElem).depth))
+			err = binary.Write(buf, binary.LittleEndian, int16(lastElem.depth))
 			if err != nil {
 				panic(err)
 			}
-			depthList.Remove(depthElem)
-			for elem := depthList.Back(); elem != nil && elem.Value.(listElem).children == 1; elem = elem.Prev() {
-				err = binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
+			depthList = depthList[:len(depthList)-1]
+
+			listLen := len(depthList) - 1
+			for i := listLen; i >= 0 && depthList[i].children == 1; i-- {
+				err = binary.Write(buf, binary.BigEndian, []byte("\xFF\x70"))
 				if err != nil {
 					panic(err)
 				}
-				err = binary.Write(buf, binary.LittleEndian, int16(elem.Value.(listElem).depth))
+				err = binary.Write(buf, binary.LittleEndian, int16(depthList[i].depth))
 				if err != nil {
 					panic(err)
 				}
+				depthList = depthList[:len(depthList)-1]
 			}
 		}
 
 		return true
 	})
 	printBin(buf)
-}
-
-func printList(depthList *list.List) {
-	for elem := depthList.Front(); elem != nil; elem = elem.Next() {
-		fmt.Printf("%v", elem.Value)
-	}
-	fmt.Printf("\n")
+	fmt.Println(symbolMap)
 }
 
 // Function walk works it's way through the xml nodes, temporarily storing each element in a struct, evaluating it, then moving on
@@ -119,7 +110,11 @@ func walk(nodes []Node, f func(Node) bool) {
 	}
 }
 
-func writeFF50(n Node, buf *bytes.Buffer) {
+func writeFF50(n Node, buf *bytes.Buffer, symbolMap map[string]uint16) {
+	// Put the element name into the symbolMap
+	if _, ok := symbolMap[n.XMLName.Local]; !ok {
+		symbolMap[n.XMLName.Local] = uint16(len(symbolMap))
+	}
 	// Write the Newline sequence
 	err := binary.Write(buf, binary.BigEndian, []byte("\xFF\x50\xFF\xFF"))
 	if err != nil {
@@ -160,7 +155,24 @@ func writeFF50(n Node, buf *bytes.Buffer) {
 	}
 }
 
-func writeFF56(n Node, buf *bytes.Buffer) {
+func writeFF56(n Node, buf *bytes.Buffer, symbolMap map[string]uint16) {
+	// variables to keep track of our symbols, and whether they need to be written out or can be written shorthand with
+	// their reference value
+	nameMatch := false
+	attrMatch := false
+	// Look for type attribute now because we need to see if that symbol can be swapped out for it's mapped value
+	typeAttr := xml.Attr{}
+	for _, attr := range n.Attrs {
+		if attr.Name.Local == "type" {
+			typeAttr = attr
+			if _, nameMatch = symbolMap[n.XMLName.Local]; !nameMatch { // Check for XML name match
+				symbolMap[n.XMLName.Local] = uint16(len(symbolMap))
+			}
+			if _, attrMatch = symbolMap[attr.Value]; !attrMatch { // Check for d:type attribute value match
+				symbolMap[attr.Value] = uint16(len(symbolMap))
+			}
+		}
+	}
 	// Write the Newline sequence
 	err := binary.Write(buf, binary.BigEndian, []byte("\xFF\x56\xFF\xFF"))
 	if err != nil {
@@ -178,33 +190,35 @@ func writeFF56(n Node, buf *bytes.Buffer) {
 		panic(err)
 	}
 
-	fmt.Println("WRITING FF FOR ATTRIBUTE" + n.XMLName.Local)
-	// Write the FF FF bytes, which signals this is a new attribute TODO Update this!
-	err = binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
-	if err != nil {
-		panic(err)
-	}
-
-	// Write the length of the d:type attribute
-	attrNameLen := int32(0)
-	for _, attr := range n.Attrs {
-		if attr.Name.Local == "type" {
-			tempLen := len(attr.Value)
-			attrNameLen = int32(tempLen)
-			err = binary.Write(buf, binary.LittleEndian, attrNameLen)
-			if err != nil {
-				panic(err)
-			}
-			// Write the d:type attribute value
-			err = binary.Write(buf, binary.LittleEndian, []byte(attr.Value))
-			if err != nil {
-				panic(err)
-			}
-
-			// Write the content value
-			convertContent(attr.Value, string(n.Content), buf)
+	// Write the FF FF bytes or name match reference number
+	if attrMatch {
+		err = binary.Write(buf, binary.BigEndian, symbolMap[typeAttr.Value])
+		if err != nil {
+			panic(err)
 		}
+	} else {
+		err = binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
+		if err != nil {
+			panic(err)
+		}
+
+		// Write the length of the d:type attribute
+		tempLen := len(typeAttr.Value)
+		attrNameLen := int32(tempLen)
+		err = binary.Write(buf, binary.LittleEndian, attrNameLen)
+		if err != nil {
+			panic(err)
+		}
+		// Write the d:type attribute value
+		err = binary.Write(buf, binary.LittleEndian, []byte(typeAttr.Value))
+		if err != nil {
+			panic(err)
+		}
+
 	}
+	// Write the content value
+	convertContent(typeAttr.Value, string(n.Content), buf, symbolMap)
+
 }
 
 // Print out the binary file
@@ -222,7 +236,7 @@ func printBin(buf *bytes.Buffer) {
 
 // Content has been encoded in various types, but is always a string in the xml file. This function
 // converts the string to the appropriate number type, than writes it to the buffer
-func convertContent(dType string, num string, buf *bytes.Buffer) {
+func convertContent(dType string, num string, buf *bytes.Buffer, symbolMap map[string]uint16) {
 	switch dType {
 	case "bool":
 		if num == "0" {
@@ -245,23 +259,49 @@ func convertContent(dType string, num string, buf *bytes.Buffer) {
 		if err != nil {
 			panic(err)
 		}
+	case "sInt32":
+		newInt, err := strconv.Atoi(num)
+		if err != nil {
+			panic(err)
+		}
+		err = binary.Write(buf, binary.LittleEndian, int32(newInt))
+		if err != nil {
+			panic(err)
+		}
+	case "sUInt8":
+		newInt, err := strconv.Atoi(num)
+		if err != nil {
+			panic(err)
+		}
+		err = binary.Write(buf, binary.LittleEndian, uint8(newInt))
+		if err != nil {
+			panic(err)
+		}
 	case "cDeltaString":
-		// Write the FF designation TODO update this
-		err := binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
-		if err != nil {
-			panic(err)
-		}
+		if _, ok := symbolMap[num]; ok {
+			err := binary.Write(buf, binary.LittleEndian, symbolMap[num])
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			// Write the FF designation TODO update this
+			err := binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
+			if err != nil {
+				panic(err)
+			}
 
-		// Write the length of the string first
-		strLen := len(num)
-		err = binary.Write(buf, binary.LittleEndian, int32(strLen))
-		if err != nil {
-			panic(err)
-		}
-		// Now write the string
-		err = binary.Write(buf, binary.BigEndian, []byte(num))
-		if err != nil {
-			panic(err)
+			// Write the length of the string first
+			strLen := len(num)
+			err = binary.Write(buf, binary.LittleEndian, int32(strLen))
+			if err != nil {
+				panic(err)
+			}
+			// Now write the string
+			err = binary.Write(buf, binary.BigEndian, []byte(num))
+			if err != nil {
+				panic(err)
+			}
+			symbolMap[num] = uint16(len(symbolMap))
 		}
 	}
 }
