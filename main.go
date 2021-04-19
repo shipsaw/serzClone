@@ -165,7 +165,7 @@ func writeFF56_41(n Node, buf *bytes.Buffer, symbolMap map[string]uint16) {
 	// Look for type attribute now because we need to see if that symbol can be swapped out for it's mapped value
 	typeAttr := xml.Attr{}
 	for _, attr := range n.Attrs {
-		if attr.Name.Local == "type" {
+		if attr.Name.Local == "type" || attr.Name.Local == "elementType" {
 			typeAttr = attr
 			if _, nameMatch = symbolMap[n.XMLName.Local]; !nameMatch { // Check for XML name match
 				symbolMap[n.XMLName.Local] = uint16(len(symbolMap))
@@ -196,7 +196,7 @@ func writeFF56_41(n Node, buf *bytes.Buffer, symbolMap map[string]uint16) {
 	}
 
 	if nameMatch {
-		err := binary.Write(buf, binary.BigEndian, symbolMap[n.XMLName.Local])
+		err := binary.Write(buf, binary.LittleEndian, symbolMap[n.XMLName.Local])
 		if err != nil {
 			panic(err)
 		}
@@ -216,7 +216,7 @@ func writeFF56_41(n Node, buf *bytes.Buffer, symbolMap map[string]uint16) {
 
 	// Write the FF FF bytes or name match reference number
 	if attrMatch {
-		err := binary.Write(buf, binary.BigEndian, symbolMap[typeAttr.Value])
+		err := binary.Write(buf, binary.LittleEndian, symbolMap[typeAttr.Value])
 		if err != nil {
 			panic(err)
 		}
@@ -269,6 +269,9 @@ func printBin(buf *bytes.Buffer) {
 // Content has been encoded in various types, but is always a string in the xml file. This function
 // converts the string to the appropriate number type, than writes it to the buffer
 func convertContent(dType string, num string, buf *bytes.Buffer, symbolMap map[string]uint16, numElements uint8) {
+	// Args will work with the case of FF 41, where there are multiple content values.  It takes the values and splits them,
+	// then loops trough the conversion switch.  If the content of the element is a string, splitting it by spaces makes
+	// no sense, so splitting is skipped
 	var args = *new([]string)
 	if dType != "cDeltaString" {
 		args = strings.Fields(num)
