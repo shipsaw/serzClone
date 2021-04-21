@@ -8,6 +8,7 @@
 			<Palette1Index d:type="sUInt8">0</Palette1Index>
 			<Palette2Index d:type="sUInt8">0</Palette2Index>
 			<Scale d:numElements="4" d:elementType="sFloat32" d:precision="string">1.0000000 1.0000000 1.0000000 0.0000000</Scale>
+			<Height d:type="sFloat32" d:alt_encoding="000000809CC22B40" d:precision="string">13.8801</Height>
 		</cSceneryRender>
 		<DevString d:type="cDeltaString">5d8bdddc-b3bc-4457-9055-a6b049697686</DevString>
 	</Record>
