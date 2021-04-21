@@ -1,0 +1,14 @@
+<cRecordSet xmlns:d="http://www.kuju.com/TnT/2003/Delta" d:version="1.0" d:id="282165930">
+	<Record>
+		<cSceneryRender d:id="295291290">
+			<DetailLevel d:type="sInt32">6</DetailLevel>
+			<Global d:type="bool">0</Global>
+			<Saved d:type="bool">1</Saved>
+			<Palette0Index d:type="sUInt8">0</Palette0Index>
+			<Palette1Index d:type="sUInt8">0</Palette1Index>
+			<Palette2Index d:type="sUInt8">0</Palette2Index>
+			<Scale d:numElements="4" d:elementType="sFloat32" d:precision="string">1.0000000 1.0000000 1.0000000 0.0000000</Scale>
+		</cSceneryRender>
+		<DevString d:type="cDeltaString">5d8bdddc-b3bc-4457-9055-a6b049697686</DevString>
+	</Record>
+</cRecordSet>

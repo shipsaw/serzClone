@@ -56,7 +56,6 @@ func main() {
 		children := len(n.Nodes)
 		if children > 0 { // If an FF 50 newline
 			depthList = append(depthList, listElem{depthCounter, children})
-			fmt.Println(depthList)
 			depthCounter++ // start tag of ff 50 counts as one line in depthCounter reference
 			writeFF50(n, buf, symbolMap)
 		} else { // If an FF 56 or FF 41
@@ -65,7 +64,6 @@ func main() {
 
 			// decrement children count of the parent node
 			depthList[len(depthList)-1].children--
-			fmt.Println(depthList)
 		}
 
 		// Check to see if we are at the end of a set of children.  If we are, unwind back to the next element with children,
@@ -105,8 +103,7 @@ func main() {
 
 		return true
 	})
-	printBin(buf)
-	fmt.Println(symbolMap)
+	//printBin(buf)
 }
 
 // Function walk works it's way through the xml nodes, temporarily storing each element in a struct, evaluating it, then moving on

@@ -2,13 +2,19 @@ package main
 
 import (
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/profile"
 )
+
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 
 const (
 	PREFIX string = "SERZ\x00\x00\x01\x00"
@@ -57,10 +63,10 @@ func (o *output) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (o *output) WriteMid(p []byte, pos int) error {
+func (o *output) WriteMid(p int, pos int) error {
 	temp := o.writePos
 	o.writePos = pos
-	_, err := o.Write(p)
+	err := binary.Write(o, binary.BigEndian, uint32(p))
 	if err != nil {
 		return err
 	}
@@ -68,13 +74,13 @@ func (o *output) WriteMid(p []byte, pos int) error {
 	return nil
 }
 
-func (o *output) CheckSym(symbol string) (bool, int) {
+func (o *output) SymExists(symbol string) (bool, int) {
 	if tableVal, ok := o.symbolMap.sMap[symbol]; ok {
 		return true, tableVal
 	}
 	o.symbolMap.sMap[symbol] = o.symbolMap.index
 	o.symbolMap.index++
-	return false, 0
+	return false, -1
 }
 
 func (o *output) writePrefix() error {
@@ -86,6 +92,10 @@ func (o *output) writePrefix() error {
 }
 
 func (o *output) Write50(matches []string, lineNum int) error {
+	if lineNum > 0 { // If not first row
+		o.tagRecord[o.tagIndex].children++
+		o.tagIndex++
+	}
 	// matches: Name, d:id
 	o.tagRecord[o.tagIndex].lineNum = lineNum
 	// FF 50 FF FF
@@ -96,22 +106,31 @@ func (o *output) Write50(matches []string, lineNum int) error {
 
 	// Check for symbol duplicate
 	// Name len
-	fmt.Println(matches[0])
 	err = binary.Write(o, binary.LittleEndian, uint32(len(matches[0])))
 	if err != nil {
 		return err
 	}
 	// Name
-	err = binary.Write(o, binary.BigEndian, []byte(matches[0]))
-	if err != nil {
-		return err
+	exists, num := o.SymExists(matches[0])
+	if !exists {
+		err = binary.Write(o, binary.BigEndian, []byte(matches[0]))
+		if err != nil {
+			return err
+		}
+	} else {
+		err = binary.Write(o, binary.LittleEndian, uint16(num))
+		if err != nil {
+			return err
+		}
 	}
 	// d:id
-	id, err := strconv.Atoi(matches[1])
-	if err != nil {
-		return err
+	id := 0
+	if matches[1] != "" {
+		id, err = strconv.Atoi(matches[1])
+		if err != nil {
+			return err
+		}
 	}
-
 	err = binary.Write(o, binary.LittleEndian, uint32(id))
 	if err != nil {
 		return err
@@ -124,7 +143,6 @@ func (o *output) Write50(matches []string, lineNum int) error {
 		return err
 	}
 
-	o.tagIndex++
 	return nil
 }
 
@@ -137,34 +155,51 @@ func (o *output) Write56(matches []string) error {
 		return err
 	}
 	// Name len
-	fmt.Println(matches[0])
 	err = binary.Write(o, binary.LittleEndian, uint32(len(matches[0])))
 	if err != nil {
 		return err
 	}
 	// Name
-	err = binary.Write(o, binary.BigEndian, []byte(matches[0]))
-	if err != nil {
-		return err
+	exists, num := o.SymExists(matches[0])
+	if !exists {
+		err = binary.Write(o, binary.BigEndian, []byte(matches[0]))
+		if err != nil {
+			return err
+		}
+	} else {
+		err = binary.Write(o, binary.LittleEndian, uint16(num))
+		if err != nil {
+			return err
+		}
+	}
+	exists, num = o.SymExists(matches[1])
+	if !exists {
+		// Type len prefix
+		err = binary.Write(o, binary.BigEndian, []byte(FF))
+		if err != nil {
+			return err
+		}
+		// Type len
+		err = binary.Write(o, binary.LittleEndian, uint32(len(matches[1])))
+		if err != nil {
+			return err
+		}
+		// Type
+		err = binary.Write(o, binary.BigEndian, []byte(matches[1]))
+		if err != nil {
+			return err
+		}
+	} else {
+		err = binary.Write(o, binary.LittleEndian, uint16(num))
+		if err != nil {
+			return err
+		}
 	}
 
-	// Type len prefix
-	err = binary.Write(o, binary.BigEndian, []byte(FF))
-	if err != nil {
-		return err
-	}
-	// Type len
-	err = binary.Write(o, binary.LittleEndian, uint32(len(matches[1])))
-	if err != nil {
-		return err
-	}
-
-	// Type
-	err = binary.Write(o, binary.BigEndian, matches[1])
-	if err != nil {
-		return err
-	}
 	// Content
+	if err := o.convertContent(matches[1], matches[2]); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -173,37 +208,52 @@ func (o *output) Write41(matches []string) error {
 	// matches: Name, numElements, type, content
 	o.tagRecord[o.tagIndex].children++
 	// FF 41 FF FF
-	err := binary.Write(o, binary.BigEndian, []byte(FF))
+	err := binary.Write(o, binary.BigEndian, []byte(FF41))
 	if err != nil {
 		return err
 	}
 	// Name len
-	fmt.Println(matches[0])
 	err = binary.Write(o, binary.LittleEndian, uint32(len(matches[0])))
 	if err != nil {
 		return err
 	}
 	// Name
-	err = binary.Write(o, binary.BigEndian, []byte(matches[0]))
-	if err != nil {
-		return err
+	exists, num := o.SymExists(matches[0])
+	if !exists {
+		err = binary.Write(o, binary.BigEndian, []byte(matches[0]))
+		if err != nil {
+			return err
+		}
+	} else {
+		err = binary.Write(o, binary.LittleEndian, uint16(num))
+		if err != nil {
+			return err
+		}
 	}
 
-	// Type len prefix
-	err = binary.Write(o, binary.BigEndian, []byte(matches[2]))
-	if err != nil {
-		return err
-	}
-	// Type len
-	err = binary.Write(o, binary.LittleEndian, uint32(len(matches[2])))
-	if err != nil {
-		return err
-	}
+	exists, num = o.SymExists(matches[2])
+	if !exists {
+		// Type len prefix
+		err = binary.Write(o, binary.BigEndian, []byte(FF))
+		if err != nil {
+			return err
+		}
+		// Type len
+		err = binary.Write(o, binary.LittleEndian, uint32(len(matches[2])))
+		if err != nil {
+			return err
+		}
 
-	// Type
-	err = binary.Write(o, binary.BigEndian, uint32(len(matches[1])))
-	if err != nil {
-		return err
+		// Type
+		err = binary.Write(o, binary.BigEndian, []byte(matches[2]))
+		if err != nil {
+			return err
+		}
+	} else {
+		err = binary.Write(o, binary.LittleEndian, uint16(num))
+		if err != nil {
+			return err
+		}
 	}
 	// Content count
 	cCount, err := strconv.Atoi(matches[1])
@@ -216,17 +266,36 @@ func (o *output) Write41(matches []string) error {
 		return err
 	}
 	// Content
+	if err := o.convertContent(matches[2], matches[3]); err != nil {
+		return err
+	}
+	return nil
+}
 
+func (o *output) Write70() error {
+	err := binary.Write(o, binary.BigEndian, []byte(FF70))
+	if err != nil {
+		return err
+	}
+	err = binary.Write(o, binary.LittleEndian, uint16(o.tagRecord[o.tagIndex].lineNum))
+	if err != nil {
+		return err
+	}
+	err = o.WriteMid(o.tagRecord[o.tagIndex].children, o.tagRecord[o.tagIndex].dWordLoc)
+	if err != nil {
+		return err
+	}
+	o.tagIndex--
 	return nil
 }
 
 func (o *output) printBin() {
 	fmt.Printf("\n")
-	fmt.Printf("1   ")
-	for i, byt := range o.outBytes {
+	fmt.Printf("0   ")
+	for i, byt := range o.outBytes[:o.writePos] {
 		fmt.Printf("%02X ", byt)
-		if linenum := (i + 1) % 16; linenum == 0 && i+1 < len(o.outBytes) {
-			fmt.Printf("\n%-4d", (i+1)/16+1)
+		if linenum := (i + 1) % 16; linenum == 0 && i+1 < len(o.outBytes[:o.writePos]) {
+			fmt.Printf("\n%-4d", (i+1)/16)
 		}
 	}
 	fmt.Printf("\n\n")
@@ -238,6 +307,8 @@ var ff41patt string = `<(\w+) d:numElements="(\d+)" d:elementType="(\w+)" .+?>(.
 var ff70patt string = `</(\w+?)>`
 
 func main() {
+	defer profile.Start().Stop()
+
 	ff50regxp := regexp.MustCompile(ff50patt)
 	ff56regxp := regexp.MustCompile(ff56patt)
 	ff41regxp := regexp.MustCompile(ff41patt)
@@ -261,71 +332,50 @@ func main() {
 	}
 
 	sliceData := strings.Split(string(fileBytes), "\n")
-	output := outputCreate(1000, len(sliceData))
+	output := outputCreate(5500000, len(sliceData))
 
 	output.writePrefix()
 	for i, slice := range sliceData {
 		matches := ff41regxp.FindStringSubmatch(slice)
 		if len(matches) > 0 {
-			output.Write41(matches[1:])
+			err = output.Write41(matches[1:])
+			if err != nil {
+				panic(err)
+			}
 			continue
 		}
 		matches = ff56regxp.FindStringSubmatch(slice)
 		if len(matches) > 0 {
-			output.Write56(matches[1:])
+			err = output.Write56(matches[1:])
+			if err != nil {
+				panic(err)
+			}
 			continue
 		}
 		matches = ff50regxp.FindStringSubmatch(slice)
 		if len(matches) > 0 {
-			output.Write50(matches[1:], i)
+			err = output.Write50(matches[1:], i)
+			if err != nil {
+				panic(err)
+			}
 			continue
 		}
 		matches = ff70regxp.FindStringSubmatch(slice)
 		if len(matches) > 0 {
-			//
+			err = output.Write70()
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
-	output.printBin()
+	//output.printBin()
 }
 
-/*
-func (l *line) fill41(matches []string) {
-	// TODO convert first
-	l.NameLen = uint32(len(matches[0]))
-	l.Name = matches[0]
-	l.TypeLen = uint32(len(matches[1]))
-	l.Type = matches[1]
-	l.ContCount = uint8(len(matches[2]))
-	l.Content = matches[3]
-}
-
-func (l *line) fill56(matches []string) {
-	l.NameLen = uint32(len(matches[0]))
-	l.Name = matches[0]
-	l.TypeLen = uint32(len(matches[1]))
-	l.Type = matches[1]
-	l.Content = matches[2]
-}
-
-func (l *line) fill50(matches []string) {
-	l.NameLen = uint32(len(matches[0]))
-	l.Name = matches[0]
-	tempId, _ := strconv.Atoi(matches[1])
-	l.Id = uint32(tempId)
-
-}
-
-func (l *line) fill70(matches []string) {
-	l.Name = matches[0]
-	// TODO
-}
-
-/*
-func convertContent(dType string, num string, buf *bytes.Buffer, symbolMap map[string]uint16) {
+func (o *output) convertContent(dType string, num string) error {
 	// Args will work with the case of FF 41, where there are multiple content values.  It takes the values and splits them,
 	// then loops trough the conversion switch.  If the content of the element is a string, splitting it by spaces makes
 	// no sense, so splitting is skipped
-	var args = *new([]string)
+	args := []string{}
 	if dType != "cDeltaString" {
 		args = strings.Fields(num)
 	} else {
@@ -335,70 +385,62 @@ func convertContent(dType string, num string, buf *bytes.Buffer, symbolMap map[s
 	for _, arg := range args {
 		switch dType {
 		case "bool":
-			ret := make([]byte, 1)
+			ret := []byte{}
 			if arg == "0" {
 				ret = []byte("\x00")
 			} else {
 				ret = []byte("\x01")
 			}
-			err := binary.Write(buf, binary.LittleEndian, ret)
+			err := binary.Write(o, binary.LittleEndian, ret)
 			if err != nil {
-				panic(err)
+				return err
 			}
 		case "sFloat32":
 			flt64, err := strconv.ParseFloat(arg, 32)
 			if err != nil {
-				panic(err)
+				return err
 			}
-			err = binary.Write(buf, binary.LittleEndian, float32(flt64))
+			err = binary.Write(o, binary.LittleEndian, float32(flt64))
 			if err != nil {
-				panic(err)
+				return err
 			}
 		case "sInt32":
 			newInt, err := strconv.Atoi(arg)
 			if err != nil {
-				panic(err)
+				return err
 			}
-			err = binary.Write(buf, binary.LittleEndian, int32(newInt))
+			err = binary.Write(o, binary.LittleEndian, int32(newInt))
 			if err != nil {
-				panic(err)
+				return err
 			}
 		case "sUInt8":
 			newInt, err := strconv.Atoi(arg)
 			if err != nil {
-				panic(err)
+				return err
 			}
-			err = binary.Write(buf, binary.LittleEndian, uint8(newInt))
+			err = binary.Write(o, binary.LittleEndian, uint8(newInt))
 			if err != nil {
-				panic(err)
+				return err
 			}
 		case "cDeltaString":
-			if _, ok := symbolMap[arg]; ok { // If this string is already saved in our symbol table...
-				err := binary.Write(buf, binary.LittleEndian, symbolMap[arg])
-				if err != nil {
-					panic(err)
-				}
-			} else {
-				// Write the FF designation
-				err := binary.Write(buf, binary.BigEndian, []byte("\xFF\xFF"))
-				if err != nil {
-					panic(err)
-				}
+			// Write the FF designation
+			err := binary.Write(o, binary.BigEndian, []byte("\xFF\xFF"))
+			if err != nil {
+				return err
+			}
 
-				// Write the length of the string first
-				strLen := len(arg)
-				err = binary.Write(buf, binary.LittleEndian, int32(strLen))
-				if err != nil {
-					panic(err)
-				}
-				// Now write the string
-				err = binary.Write(buf, binary.BigEndian, []byte(num))
-				if err != nil {
-					panic(err)
-				}
-				symbolMap[arg] = uint16(len(symbolMap))
+			// Write the length of the string first
+			strLen := len(arg)
+			err = binary.Write(o, binary.LittleEndian, int32(strLen))
+			if err != nil {
+				return err
+			}
+			// Now write the string
+			err = binary.Write(o, binary.BigEndian, []byte(num))
+			if err != nil {
+				return err
 			}
 		}
 	}
+	return nil
 }
-*/
