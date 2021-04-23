@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -40,7 +42,6 @@ type tag struct {
 	dWordLoc int
 }
 
-/*
 func outputCreate(bytes int, tagLen int) output {
 	return output{
 		outBytes: make([]byte, bytes),
@@ -91,7 +92,9 @@ func (o *output) writePrefix() error {
 func (o *output) Write50(matches []string, lineNum int) error {
 	if lineNum > 0 { // If not first row
 		o.tagRecord[o.tagIndex].children++
-		o.tagIndex++
+		if matches[2] != "/" { // If not a void element
+			o.tagIndex++
+		}
 	}
 	// matches: Name, d:id
 	o.tagRecord[o.tagIndex].lineNum = lineNum
@@ -102,14 +105,14 @@ func (o *output) Write50(matches []string, lineNum int) error {
 	}
 
 	// Check for symbol duplicate
-	// Name len
-	err = binary.Write(o, binary.LittleEndian, uint32(len(matches[0])))
-	if err != nil {
-		return err
-	}
-	// Name
 	exists, num := o.SymExists(matches[0])
 	if !exists {
+		// Name len
+		err = binary.Write(o, binary.LittleEndian, uint32(len(matches[0])))
+		if err != nil {
+			return err
+		}
+		// Name
 		err = binary.Write(o, binary.BigEndian, []byte(matches[0]))
 		if err != nil {
 			return err
@@ -298,19 +301,24 @@ func (o *output) printBin() {
 	fmt.Printf("\n\n")
 }
 
-*/
-var ff50patt string = `<(\w+)(?: xmlns[^ ]+)?(?: d:version[^ ]+)?(?: d:id="([0-9]+)")?>`
-var ff56patt string = `<(\w+)(?: d:type="(\w+)")(?: d:alt_encoding[^ ]+)?(?: d:precision[^ >]+)?>([0-9\.-]+)<`
-var ff41patt string = `<(\w+) d:numElements="(\d+)" d:elementType="(\w+)" .+?>(.+?)<`
-var ff70patt string = `</(\w+?)>`
+var ff50noId string = `^\s*<([\w-]+)()(/)?>\s*$`
+var ff50id string = `^\s*<([\w-]+) d:id="([^"]+)"(/)?>\s*$`
+var ff56noPrec string = `<([^ ]+) d:type="([^"]+)">([^<]+)<`
+var ff56prec string = `<([^ ]+)(?: d:type="([^"]+)")(?: d:alt_encoding[^ ]+)(?: d:precision[^ >]+)>([^<]+)<`
+var ff41patt string = `<([^ ]+) d:numElements="([^"]+)" d:elementType="([^"]+)" d:precision[^>]+>([^<]+)<`
+var ff70patt string = `^\s*</([\w-]+)>\s*`
+var firstline string = `<([\w]+)(?: xm[^ ]+)(?: d:ver[^ ]+)(?: d:id="([^"]+)")(/)?`
 
 func main() {
 	//defer profile.Start().Stop()
 
-	//ff50regxp := regexp.MustCompile(ff50patt)
-	ff56regxp := regexp.MustCompile(ff56patt)
-	//ff41regxp := regexp.MustCompile(ff41patt)
-	//ff70regxp := regexp.MustCompile(ff70patt)
+	ff50noIdRegxp := regexp.MustCompile(ff50noId)
+	ff50IdRegxp := regexp.MustCompile(ff50id)
+	ff56noPrecRegxp := regexp.MustCompile(ff56noPrec)
+	ff56precRegxp := regexp.MustCompile(ff56prec)
+	ff41regxp := regexp.MustCompile(ff41patt)
+	ff70regxp := regexp.MustCompile(ff70patt)
+	flRegxp := regexp.MustCompile(firstline)
 
 	/*
 		//symbolMap := new(symbolMap)
@@ -322,7 +330,7 @@ func main() {
 			fileName := os.Args[1]
 	*/
 
-	fileBytes, err := ioutil.ReadFile("oldTest.xml")
+	fileBytes, err := ioutil.ReadFile("test.xml")
 
 	if err != nil {
 		fmt.Println(err)
@@ -330,36 +338,24 @@ func main() {
 	}
 
 	sliceData := strings.Split(string(fileBytes), "\n")
-	//output := outputCreate(5500000, len(sliceData))
+	output := outputCreate(5500000, len(sliceData))
 
-	//output.writePrefix()
-	for _, slice := range sliceData {
-		matches := ff56regxp.FindStringSubmatch(slice)
+	output.writePrefix()
+	for i, slice := range sliceData {
+		//fmt.Println("")
+		//fmt.Println("TagIndex: ", output.tagIndex)
+		matches := ff50noIdRegxp.FindStringSubmatch(slice)
 		if len(matches) > 0 {
-			/*err = output.Write41(matches[1:])
-			if err != nil {
-				panic(err)
-			}
-			*/
-			fmt.Println("ORIG:", slice)
-			fmt.Println("VALUES:", matches[1:])
-			continue
-		}
-	}
-
-}
-
-/*
-		matches = ff56regxp.FindStringSubmatch(slice)
-		if len(matches) > 0 {
-			err = output.Write56(matches[1:])
+			//fmt.Println(i+1, "FF 50 ", matches[1])
+			err = output.Write50(matches[1:], i)
 			if err != nil {
 				panic(err)
 			}
 			continue
 		}
-		matches = ff50regxp.FindStringSubmatch(slice)
+		matches = ff50IdRegxp.FindStringSubmatch(slice)
 		if len(matches) > 0 {
+			//fmt.Println(i+1, "FF 50 ", matches[1])
 			err = output.Write50(matches[1:], i)
 			if err != nil {
 				panic(err)
@@ -368,13 +364,51 @@ func main() {
 		}
 		matches = ff70regxp.FindStringSubmatch(slice)
 		if len(matches) > 0 {
+			//fmt.Println(i+1, "FF 70 ", matches[1])
 			err = output.Write70()
 			if err != nil {
 				panic(err)
 			}
+			continue
+		}
+		matches = ff56noPrecRegxp.FindStringSubmatch(slice)
+		if len(matches) > 0 {
+			//fmt.Println(i+1, "FF 56 ", matches[1])
+			err = output.Write56(matches[1:])
+			if err != nil {
+				panic(err)
+			}
+			continue
+		}
+		matches = ff56precRegxp.FindStringSubmatch(slice)
+		if len(matches) > 0 {
+			//fmt.Println(i+1, "FF 56 ", matches[1])
+			err = output.Write56(matches[1:])
+			if err != nil {
+				panic(err)
+			}
+			continue
+		}
+		matches = ff41regxp.FindStringSubmatch(slice)
+		if len(matches) > 0 {
+			//fmt.Println(i+1, "FF 41 ", matches[1])
+			err = output.Write41(matches[1:])
+			if err != nil {
+				panic(err)
+			}
+			continue
+		}
+		matches = flRegxp.FindStringSubmatch(slice)
+		if len(matches) > 0 {
+			//fmt.Println(i+1, "FF 50 ", matches[1])
+			err = output.Write50(matches[1:], i)
+			if err != nil {
+				panic(err)
+			}
+			continue
 		}
 	}
-	output.printBin()
+	//output.printBin()
 }
 
 func (o *output) convertContent(dType string, num string) error {
@@ -450,4 +484,3 @@ func (o *output) convertContent(dType string, num string) error {
 	}
 	return nil
 }
-*/

@@ -3,6 +3,7 @@ Every bin begins with the letters "SERZ"
 	A newline is indicated by 0xFF, and depending on the following three bits means several different things.  The order of the attributes is important.
 	FF 50 FF FF is a line that has children, and has the optional attribute "d:id"
 	The full format is: FF FF 50 FF, 4 bytes to indicate tag name length, tag name, d:id attribute value, 4 bytes to indicate number of children
+	If a ff 50 has no children, it is a closed tag with format <[tagname]/>
 
 	FF 56 FF FF is a line that has no children, and the optional attributes are: "d:type d:precision d:alt_encoding"
 	The full format is: FF FF 56 FF, 4 bytes to store tag name length, tag name, two bits to indicate whether the 
