@@ -22,7 +22,7 @@ typedef struct {
 
 static char* readXML(char*);
 static void WritePrelude();
-static void WriteElemStart(yxml_t*, enum elType, size_t);
+static void WriteElemStart(yxml_t*, enum elType);
 
 // Global vars
 map_int_t symMap; // symbol map
@@ -63,7 +63,6 @@ int main () {
 	char *sourceIter = source;
 	char ff41ElemCt;
 	elemType = NotSet;
-	size_t nameLen;
 
 	// Parse xml
 	for (; *sourceIter; sourceIter++) {
@@ -73,7 +72,6 @@ int main () {
 		if (r != 0)
 			switch (r) {
 				case YXML_ELEMSTART:
-					nameLen = yxml_symlen(&x, x.elem); // Uses the fast yxml function to get length rather than slower strlen
 					break;
 				case YXML_ATTRVAL:
 					*(attrValIndex++) = *x.data;
@@ -97,13 +95,11 @@ int main () {
 							*(attrValIndex) = '\0';
 							break;
 					}
-					if (elemType != NotSet) {
-					WriteElemStart(&x, elemType, nameLen);
-					}
+					WriteElemStart(&x, elemType);
 					attrValIndex = attrVal;
 				case YXML_CONTENT:
 					if (*(x.data) == '\n' && lastType == YXML_ELEMSTART)
-						WriteElemStart(&x, FF50, nameLen);
+						WriteElemStart(&x, FF50);
 					break;
 				case YXML_ELEMEND:
 					//printf("CLOSE %s\n", x.elem);
@@ -153,11 +149,11 @@ static void WritePrelude() {
 	return;
 }
 
-static void WriteElemStart(yxml_t* x, enum elType elemType, size_t nameLen) {
+static void WriteElemStart(yxml_t* x, enum elType elemType) {
+
 	static uint16_t ff50 = 0x50FF;
 	static uint16_t ff56 = 0x56FF;
 	static uint16_t ff41 = 0x41FF;
-	static uint16_t ff = 0xFFFF;
 	switch (elemType) {
 		case FF50:
 			fwrite(&ff50, sizeof(uint16_t), 1, outFile);
@@ -168,19 +164,7 @@ static void WriteElemStart(yxml_t* x, enum elType elemType, size_t nameLen) {
 		case FF41:
 			fwrite(&ff41, sizeof(uint16_t), 1, outFile);
 			break;
-		default:
-			printf("NO MATCH: %s, %d\n", x->elem, elemType);
 	}
-// Check for symbol in map
-	int *val = map_get(&symMap, x->elem);
-	if (val) { // if symbol match found
-		fwrite(val, sizeof(uint16_t), 1, outFile);
-	} else { // if symbol match not found
-		fwrite(&ff, sizeof(char), 2, outFile);
-		fwrite(&nameLen, sizeof(uint32_t), 1, outFile);
-		fwrite(x->elem, sizeof(char), nameLen, outFile);
-	}
-
 	return;
 }
 /*
