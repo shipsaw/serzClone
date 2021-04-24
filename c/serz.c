@@ -4,6 +4,7 @@
 #include <string.h>
 #include "yxml.h"
 #include "map.h"
+#include <stdbool.h>
 
 #define BUFSIZE 4096
 
@@ -20,9 +21,10 @@ typedef struct {
 	int index;
 } recordArr;
 
-static char* readXML(char*);
-static void WritePrelude();
-static void WriteElemStart(yxml_t*, enum elType, size_t);
+char* readXML(char*);
+void WritePrelude();
+void WriteElemStart(yxml_t*, enum elType, size_t, char*);
+void checkMap(char *symbol, size_t length);
 
 // Global vars
 map_int_t symMap; // symbol map
@@ -98,12 +100,15 @@ int main () {
 							break;
 					}
 					if (elemType != NotSet) {
-					WriteElemStart(&x, elemType, nameLen);
+					WriteElemStart(&x, elemType, nameLen, attrVal);
 					}
 					attrValIndex = attrVal;
 				case YXML_CONTENT:
-					if (*(x.data) == '\n' && lastType == YXML_ELEMSTART)
-						WriteElemStart(&x, FF50, nameLen);
+					if (*(x.data) == '\n' && lastType == YXML_ELEMSTART) {// If ff50 element with no d:id value
+						for (int i = 0; i < 4; i++) // reset the attrval because an empty element won't clear this val
+							attrVal[i] = 0;
+						WriteElemStart(&x, FF50, nameLen, attrVal);
+					}
 					break;
 				case YXML_ELEMEND:
 					//printf("CLOSE %s\n", x.elem);
@@ -120,7 +125,7 @@ int main () {
 }
 
 // Given a pointer, does proper allocation and reads the xml file into the memory
-static char* readXML(char* source) {
+char* readXML(char* source) {
 	// Read xml bytes
 	if (fseek(xmlDoc, 0L, SEEK_END) == 0) {
 		/* Get the size of the file. */
@@ -145,7 +150,7 @@ static char* readXML(char* source) {
 }
 
 // Writes the prelude to the bin file
-static void WritePrelude() {
+ void WritePrelude() {
 	char *prelude1 = "SERZ";
 	uint32_t prelude2 = 0x00010000;
 	fwrite(prelude1, sizeof(char), sizeof(4), outFile);
@@ -153,36 +158,78 @@ static void WritePrelude() {
 	return;
 }
 
-static void WriteElemStart(yxml_t* x, enum elType elemType, size_t nameLen) {
+/*
+typedef struct {
+	uint32_t children; // uint32 because that's the format it is written in the bin file
+	uint32_t linenum;  // uint32 because that's the type of the yxml_t.line attribute
+	long childrenAdd;  // long based on the type of bufsize
+} record;
+*/
+
+void WriteElemStart(yxml_t* x, enum elType elemType, size_t nameLen, char *attrVal) {
+	uint32_t attrValLen;
+
 	static uint16_t ff50 = 0x50FF;
 	static uint16_t ff56 = 0x56FF;
 	static uint16_t ff41 = 0x41FF;
-	static uint16_t ff = 0xFFFF;
+	static uint16_t zero = 0x0;
 	switch (elemType) {
 		case FF50:
+			records.index++;
+			records.records[records.index].linenum = x->line;
 			fwrite(&ff50, sizeof(uint16_t), 1, outFile);
+			checkMap(x->elem, nameLen);
+			int numVal = atoi(attrVal);
+			fwrite(&numVal, sizeof(uint32_t), 1, outFile);
+			records.records[records.index].childrenAdd = ftell(outFile);
+			fwrite(&zero, sizeof(uint32_t), 1, outFile);
+
 			break;
 		case FF56:
+			records.records[records.index].children++;
 			fwrite(&ff56, sizeof(uint16_t), 1, outFile);
+			checkMap(x->elem, nameLen);
+			attrValLen = strlen(attrVal);
+			checkMap(attrVal, attrValLen);
 			break;
 		case FF41:
+			records.records[records.index].children++;
 			fwrite(&ff41, sizeof(uint16_t), 1, outFile);
+			checkMap(x->elem, nameLen);
+			attrValLen = strlen(attrVal);
+			attrValLen = strlen(attrVal) - 1; // Leaves off the 1-byte elementCount value
 			break;
 		default:
 			printf("NO MATCH: %s, %d\n", x->elem, elemType);
 	}
+
+	return;
+}
+
+/*
+typedef struct {
+	record records[30];
+	int index;
+} recordArr;
+*/
+
 // Check for symbol in map
-	int *val = map_get(&symMap, x->elem);
+void checkMap(char* symbol, size_t length) {
+	static int mapIter = 0;
+	static uint16_t ff = 0xFFFF;
+	int *val = map_get(&symMap, symbol);
 	if (val) { // if symbol match found
 		fwrite(val, sizeof(uint16_t), 1, outFile);
 	} else { // if symbol match not found
 		fwrite(&ff, sizeof(char), 2, outFile);
-		fwrite(&nameLen, sizeof(uint32_t), 1, outFile);
-		fwrite(x->elem, sizeof(char), nameLen, outFile);
+		fwrite(&length, sizeof(uint32_t), 1, outFile);
+		fwrite(symbol, sizeof(char), length, outFile);
+		map_set(&symMap, symbol, mapIter++);
 	}
-
-	return;
 }
+
+
+// 
 /*
 typedef struct {
 	yxml_t* yxml_elem;
