@@ -3,13 +3,11 @@
 #include <stdint.h>
 #include <string.h>
 #include "yxml.h"
+#include "map.h"
 
 #define BUFSIZE 4096
 
-static int write50(yxml_t*);
-static char* readXML(char*, FILE*);
-
-enum elType{NotSet, FF50, FF56, FF41, FF70};
+enum elType {NotSet, FF50, FF56, FF41, FF70};
 
 typedef struct {
 	uint32_t children; // uint32 because that's the format it is written in the bin file
@@ -22,20 +20,36 @@ typedef struct {
 	int index;
 } recordArr;
 
-int main () {
+typedef struct {
+	yxml_t* yxml_elem;
+	size_t symLen;
 	enum elType elemType;
-	void *buf = malloc(BUFSIZE);
+	recordArr* records;
+	FILE* fp;
+	map_int_t* symMap;
+} elemInfo;
+
+static char* readXML(char*, FILE*);
+static void WritePrelude(FILE*);
+static void WriteElemStart(yxml_t*, enum elType, recordArr*, FILE*, map_int_t*);
+
+int main () {
+	// yxml variables
 	yxml_t x;
 	yxml_init(&x, buf, BUFSIZE);
-	char *source = NULL;
-	recordArr records;
-
-
-
+	// map variables
+	map_int_t symMap;
+	map_init(&symMap);
+	// memory and file variables
+	void *buf = malloc(BUFSIZE);
 	FILE *xmlDoc, *outFile;
+	char *source = NULL;
+	// user-defined types
+	enum elType elemType;
+
 	printf("Opening file..\n");
 	// open xml file
-	if ((xmlDoc = fopen("test.xml", "r")) == NULL) {
+	if ((xmlDoc = fopen("oldTest.xml", "r")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
@@ -45,52 +59,59 @@ int main () {
 		exit(1);
 	}
 	source = readXML(source, xmlDoc);
-	// Parse xml
+	WritePrelude(outFile);
+
+	// Initialize record and value-keeping variables
 	int lastType;
 	char attrVal[40];
 	char *attrValIndex = attrVal;
 	char *sourceIter = source;
+	recordArr records;
+	records.index = 0; //Set index to zero
+	char ff41elemCt;
 	elemType = NotSet;
 
+	// Parse xml
 	for (; *sourceIter; sourceIter++) {
 		yxml_ret_t r = yxml_parse(&x, *sourceIter);
 		if (r < 0)
 			exit(1);
 		if (r != 0)
-		switch (r) {
-			case YXML_ELEMSTART:
-				break;
-			case YXML_ATTRVAL:
-				*(attrValIndex++) = *x.data;
-				break;
-			case YXML_ATTREND:
-				*(attrValIndex) = '\0';
-				if (strcmp(x.attr, "d:id") == 0) {
-					//printf("FF 50 with id. %s, %s\n", x.elem, attrVal);
+			switch (r) {
+				case YXML_ELEMSTART:
+					break;
+				case YXML_ATTRVAL:
+					*(attrValIndex++) = *x.data;
+					break;
+				case YXML_ATTREND:
+					*(attrValIndex) = '\0';
+					switch (x.attr[2]) {
+						case 'i': // If matches d:id
+							elemType = FF50;
+							break;
+						case 't': // If matches d:type
+							elemType = FF56;
+							break;
+						case 'n': // If matches numElements
+							// Take this character and save it to attach to the other ff41 attribute
+							ff41elemCt = *(attrValIndex - 1);
+							break;
+						case 'e': // If matches d:elementType
+							elemType = FF41;
+							*(attrValIndex++) = 'ff41elemCt';
+							*(attrValIndex) = '\0';
+							break;
+					}
 					attrValIndex = attrVal;
-				} else if (strcmp(x.attr, "d:type") == 0) {
-					//printf("FF 56: %s %s\n", x.elem, attrVal);
-					attrValIndex = attrVal;
-				} else if (strcmp(x.attr, "d:numElements") == 0) {
-					//printf("FF 41: %s ", attrVal);
-					attrValIndex = attrVal;
-				} else if (strcmp(x.attr, "d:elementType") == 0) {
-					//printf("%s\n", attrVal);
-					attrValIndex = attrVal;
-				} else {
-					attrValIndex = attrVal;
-				}
-						
-				break;
-			case YXML_CONTENT:
-				if (*(x.data) == '\n' && lastType == YXML_ELEMSTART)
-					//printf("FF 50 EMPTY. %s\n", x.elem);
-				break;
-			case YXML_ELEMEND:
-				//printf("CLOSE %s\n", x.elem);
+				case YXML_CONTENT:
+					if (*(x.data) == '\n' && lastType == YXML_ELEMSTART)
+						WriteElemStart(&x, FF50, &records, outFile, &symMap);
+					break;
+				case YXML_ELEMEND:
+					//printf("CLOSE %s\n", x.elem);
 
-				break;
-		}
+					break;
+			}
 		lastType = r;
 	}
 	printf("Done.\n");
@@ -123,4 +144,43 @@ static char* readXML(char* source, FILE* xmlDoc) {
 		}
 	}
 	return source;
+}
+
+// Writes the prelude to the bin file
+static void WritePrelude(FILE* outFile) {
+	char *prelude1 = "SERZ";
+	uint32_t prelude2 = 0x00010000;
+	fwrite(prelude1, sizeof(char), sizeof(4), outFile);
+	fwrite(&prelude2, sizeof(uint32_t), 1, outFile);
+	return;
+}
+
+static void WriteElemStart(elemInfo *ei) {
+
+	static uint16_t ff50 = 0x50FF;
+	static uint16_t ff56 = 0x56FF;
+	static uint16_t ff41 = 0x41FF;
+	switch (ei->elemType) {
+		case FF50:
+			fwrite(&ff50, sizeof(uint16_t), 1, ei->outFile);
+			fwrite(
+			break;
+		case FF56:
+			fwrite(&ff56, sizeof(uint16_t), 1, ei->outFile);
+			break;
+		case FF41:
+			fwrite(&ff41, sizeof(uint16_t), 1, ei->outFile);
+			break;
 	}
+	return;
+}
+/*
+typedef struct {
+	yxml_t* yxml_elem;
+	size_t symLen;
+	enum elType elemType;
+	recordArr* records;
+	FILE* fp;
+	map_int_t* symMap;
+} elemInfo;
+*/
