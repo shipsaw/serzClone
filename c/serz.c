@@ -7,6 +7,9 @@
 #define BUFSIZE 4096
 
 static int write50(yxml_t*);
+static char* readXML(char*, FILE*);
+
+enum elType{NotSet, FF50, FF56, FF41, FF70};
 
 typedef struct {
 	uint32_t children; // uint32 because that's the format it is written in the bin file
@@ -20,6 +23,7 @@ typedef struct {
 } recordArr;
 
 int main () {
+	enum elType elemType;
 	void *buf = malloc(BUFSIZE);
 	yxml_t x;
 	yxml_init(&x, buf, BUFSIZE);
@@ -31,7 +35,7 @@ int main () {
 	FILE *xmlDoc, *outFile;
 	printf("Opening file..\n");
 	// open xml file
-	if ((xmlDoc = fopen("oldTest.xml", "r")) == NULL) {
+	if ((xmlDoc = fopen("test.xml", "r")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
@@ -40,6 +44,64 @@ int main () {
 		printf("\nError opening file\n");
 		exit(1);
 	}
+	source = readXML(source, xmlDoc);
+	// Parse xml
+	int lastType;
+	char attrVal[40];
+	char *attrValIndex = attrVal;
+	char *sourceIter = source;
+	elemType = NotSet;
+
+	for (; *sourceIter; sourceIter++) {
+		yxml_ret_t r = yxml_parse(&x, *sourceIter);
+		if (r < 0)
+			exit(1);
+		if (r != 0)
+		switch (r) {
+			case YXML_ELEMSTART:
+				break;
+			case YXML_ATTRVAL:
+				*(attrValIndex++) = *x.data;
+				break;
+			case YXML_ATTREND:
+				*(attrValIndex) = '\0';
+				if (strcmp(x.attr, "d:id") == 0) {
+					//printf("FF 50 with id. %s, %s\n", x.elem, attrVal);
+					attrValIndex = attrVal;
+				} else if (strcmp(x.attr, "d:type") == 0) {
+					//printf("FF 56: %s %s\n", x.elem, attrVal);
+					attrValIndex = attrVal;
+				} else if (strcmp(x.attr, "d:numElements") == 0) {
+					//printf("FF 41: %s ", attrVal);
+					attrValIndex = attrVal;
+				} else if (strcmp(x.attr, "d:elementType") == 0) {
+					//printf("%s\n", attrVal);
+					attrValIndex = attrVal;
+				} else {
+					attrValIndex = attrVal;
+				}
+						
+				break;
+			case YXML_CONTENT:
+				if (*(x.data) == '\n' && lastType == YXML_ELEMSTART)
+					//printf("FF 50 EMPTY. %s\n", x.elem);
+				break;
+			case YXML_ELEMEND:
+				//printf("CLOSE %s\n", x.elem);
+
+				break;
+		}
+		lastType = r;
+	}
+	printf("Done.\n");
+	free(source);
+	fclose(xmlDoc);
+	fclose(outFile);
+	return 0;
+}
+
+// Given a pointer, does proper allocation and reads the xml file into the memory
+static char* readXML(char* source, FILE* xmlDoc) {
 	// Read xml bytes
 	if (fseek(xmlDoc, 0L, SEEK_END) == 0) {
 		/* Get the size of the file. */
@@ -60,46 +122,5 @@ int main () {
 			source[newLen++] = '\0'; /* Just to be safe. */
 		}
 	}
-	// Parse xml
-	int bitCount = 0;
-	char *sourceIter = source;
-	for (; *sourceIter; sourceIter++) {
-		yxml_ret_t r = yxml_parse(&x, *sourceIter);
-		if (r < 0)
-			exit(1);
-		switch (r) {
-			case YXML_ATTRVAL:
-				if (strcmp(x.attr,"d:id") == 0) {
-					if (bitCount == 8) {
-						write50(&x);
-						bitCount = 0;
-						continue;
-					}
-					bitCount++;
-				}
-				break;
-			case YXML_CONTENT:
-				//printf("%c", *(x.data));
-				break;
-			case YXML_ELEMEND:
-				//printf("END:%s", x.elem);
-				break;
-		}
+	return source;
 	}
-
-	if (fwrite("Hello", sizeof(char), sizeof("Hello"), outFile) == 0) {
-		printf("Write error\n");
-		exit(1);
-	}
-	printf("Done.\n");
-	free(source);
-	fclose(xmlDoc);
-	fclose(outFile);
-	return 0;
-}
-
-static int write50(yxml_t *x) {
-	printf("FF 50, %lu, %s\n ", strlen(x->elem), x->elem);
-	//for (int i = -8; i < 0; i++
-	return 0;
-}
