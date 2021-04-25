@@ -130,7 +130,6 @@ int main () {
 					if (contValIndex != contVal) {
 						*contValIndex = '\0';
 						contWrite(contVal, contType, ff41ElemCt);
-						printf("Writing %s\n", contVal);
 						contValIndex = contVal;
 					}
 					if (closeTracker == FF70) { // If a FF 70, which follows a one-line element close element
@@ -308,7 +307,6 @@ void contWrite(char* content, enum contType type, int count) {
 	for (int i = 0; i < count; i++) {
 		if (token != NULL) {
 			content = token;
-			printf("%s\n", token);
 			token = strtok(NULL, " ");
 		}
 
@@ -330,7 +328,6 @@ void contWrite(char* content, enum contType type, int count) {
 				break;
 			case sFloat32:
 				float32 = atof(content);
-				printf("Writing %f\n", float32);
 				fwrite(&float32, sizeof(uint32_t), 1, outFile);
 				break;
 			case cDeltaString:
