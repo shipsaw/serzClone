@@ -10,7 +10,7 @@
 #define BUFSIZE 4096
 
 enum elType {NotSet, AnyOpen, FF50, FF56, FF41, FF70};
-enum cType {boolean, sUInt8, sInt32, sFloat32, sUInt64, cDeltaString};
+enum contType {boolean, sUInt8, sInt32, sFloat32, sUInt64, cDeltaString};
 
 typedef struct {
 	uint32_t children; // uint32 because that's the format it is written in the bin file
@@ -31,7 +31,8 @@ void WriteFF50(yxml_t*, size_t, char*);
 void WriteFF56(yxml_t*, size_t, char*);
 void WriteFF41(yxml_t*, size_t, char*, int);
 void WriteFF70(yxml_t*);
-enum cType contType(char*);
+enum contType contentType(char*);
+void contWrite(char*, enum contType, int);
 
 // Global vars
 map_int_t symMap; // symbol map
@@ -74,8 +75,9 @@ int main () {
 	char contVal[200];		// Content value buffer
 	char *attrValIndex = attrVal;	// Attrubute value iterator
 	char *contValIndex = contVal;	// Content value iterator
-	uint8_t ff41ElemCt;		// Two attributes get writtern for ff41, numElements is read first but written second
+	uint8_t ff41ElemCt = 1;		// Two attributes get writtern for ff41, numElements is read first but written second
 	size_t nameLen;			// Length of x.attr
+	enum contType contType;		// Content type enum
 
 	// Parse xml
 	for (; *sourceIter; sourceIter++) {
@@ -85,6 +87,7 @@ int main () {
 		if (r != 0)
 			switch (r) {
 				case YXML_ELEMSTART:
+					ff41ElemCt = 1;				// Reset FF 41 element count to default for other-elem types
 					nameLen = yxml_symlen(&x, x.elem); 	// Uses the fast yxml function to get length rather than slower strlen
 					closeTracker = AnyOpen;			// No FF 70 if a close is followed by any element open
 					contValIndex = contVal;			// Reset content buffer
@@ -101,8 +104,7 @@ int main () {
 							WriteFF50(&x, nameLen, attrVal);
 							break;
 						case 't': 			// If matches d:type
-							printf("%s is ", x.elem);
-							contType(attrVal);
+							contType = contentType(attrVal);
 							elemType = FF56;
 							WriteFF56(&x, nameLen, attrVal);
 							break;
@@ -110,8 +112,7 @@ int main () {
 							ff41ElemCt = atoi(attrVal);
 							break;
 						case 'e': 			// If matches d:elementType
-							printf("%s is ", x.elem);
-							contType(attrVal);
+							contType = contentType(attrVal);
 							elemType = FF41;
 							WriteFF41(&x, nameLen, attrVal, ff41ElemCt);
 							break;
@@ -122,14 +123,14 @@ int main () {
 						for (int i = 0; i < 4; i++) 			// reset the value buffer because an empty element won't clear this
 							attrVal[i] = 0;
 						WriteFF50(&x, nameLen, attrVal);
-					}
-
+					} else if (*(x.data) == ' ' || !isspace(*x.data))  // Eliminate all newline-type characters, but not space
 					*(contValIndex++) = *x.data;
 					break;
 				case YXML_ELEMEND:
 					if (contValIndex != contVal) {
 						*contValIndex = '\0';
-						printf(" %s\n", contVal);
+						contWrite(contVal, contType, ff41ElemCt);
+						printf("Writing %s\n", contVal);
 						contValIndex = contVal;
 					}
 					if (closeTracker == FF70) { // If a FF 70, which follows a one-line element close element
@@ -274,21 +275,74 @@ void checkMap(char* symbol, size_t length) {
 	return;
 }
 
-enum cType contType(char* type) {
+enum contType contentType(char* type) {
 		if (strcmp(type, "bool") == 0) {
-			printf("BOOL");
+			return boolean;
 		} else if(strcmp(type, "sUInt8") == 0) {
-			printf("sUInt8");
+			return sUInt8;
 		} else if(strcmp(type, "sInt32") == 0) {
-			printf("sInt32");
+			return sInt32;
 		} else if(strcmp(type, "sFloat32") == 0) {
-			printf("sFloat32");
+			return sFloat32;
 		} else if(strcmp(type, "cDeltaString") == 0) {
-			printf("cDeltaString");
+			return cDeltaString;
 		} else if(strcmp(type, "sUInt64") == 0) {
-			printf("sUInt64");
+			return sUInt64;
 		} else {
-			printf("UNKNOWN TYPE");
+			printf("UNKNOWN TYPE: %s\n", type);
+			exit(1);
 		}
-		return boolean;
+}
+
+void contWrite(char* content, enum contType type, int count) {
+	static int bool0 = 0;
+	static int bool1 = 1;
+
+	uint8_t uint8;
+	uint32_t uint32;
+	uint64_t uint64;
+	float float32;
+
+	char* token = strtok(content, " ");
+
+	for (int i = 0; i < count; i++) {
+		if (token != NULL) {
+			content = token;
+			printf("%s\n", token);
+			token = strtok(NULL, " ");
+		}
+
+		switch (type) {
+			case boolean:
+				if (content[0] == '0') {
+					fwrite(&bool0, sizeof(char), 1, outFile);
+				} else {
+					fwrite(&bool1, sizeof(char), 1, outFile);
+				}
+				break;
+			case sUInt8:
+				uint8 = atoi(content);
+				fwrite(&uint8, sizeof(char), 1, outFile);
+				break;
+			case sInt32:
+				uint32 = atoi(content);
+				fwrite(&uint32, sizeof(uint32_t), 1, outFile);
+				break;
+			case sFloat32:
+				float32 = atof(content);
+				printf("Writing %f\n", float32);
+				fwrite(&float32, sizeof(uint32_t), 1, outFile);
+				break;
+			case cDeltaString:
+				checkMap(content, strlen(content));
+				break;
+			case sUInt64:
+				uint64 = strtoll(content, NULL, 10);
+				fwrite(&uint64, sizeof(uint64_t), 1, outFile);
+				break;
+			default:
+				printf("Error: uknown type enum\n");
+				exit(1);
+		}
+	}
 }
