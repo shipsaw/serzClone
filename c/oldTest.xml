@@ -4,6 +4,7 @@
 			<DetailLevel d:type="sInt32">6</DetailLevel>
 			<Global d:type="bool">0</Global>
 			<Saved d:type="bool">1</Saved>
+			<Closed/>
 			<Palette0Index d:type="sUInt8">0</Palette0Index>
 			<Palette1Index d:type="sUInt8">0</Palette1Index>
 			<Palette2Index d:type="sUInt8">0</Palette2Index>
