@@ -55,12 +55,12 @@ int main () {
 
 	printf("Opening file..\n");
 	// open xml file
-	if ((xmlDoc = fopen("oldTest.xml", "r")) == NULL) {
+	if ((xmlDoc = fopen("small.xml", "r")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
 	// Open bin file
-	if ((outFile = fopen("oldTest.bin", "wb")) == NULL) {
+	if ((outFile = fopen("small.bin", "wb")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
@@ -140,6 +140,12 @@ int main () {
 					}
 					closeTracker= ElemClose;
 					break;
+				case YXML_PISTART:
+					printf("PISTART\n");
+					break;
+				case YXML_PIEND:
+					printf("PIEND\n");
+					break;
 			}
 			lastType = r;
 		}
@@ -178,10 +184,14 @@ char* readXML(char* source) {
 
 // Writes the prelude to the bin file
 void WritePrelude() {
-	char *prelude1 = "SERZ";
-	uint32_t prelude2 = 0x00010000;
+	static char *prelude1 = "SERZ";
+	static uint32_t prelude2 = 0x00010000;
+	static uint32_t prelude3 = 0x0C0043FF;
+	static uint32_t prelude4 = 0;
 	fwrite(prelude1, sizeof(char), sizeof(4), outFile);
 	fwrite(&prelude2, sizeof(uint32_t), 1, outFile);
+	fwrite(&prelude3, sizeof(uint32_t), 1, outFile);
+	fwrite(&prelude4, sizeof(char), 3, outFile);
 	return;
 }
 
@@ -192,8 +202,12 @@ void WriteFF50(yxml_t* x, size_t nameLen, char *attrVal) {
 	uint16_t mapIdNum;
 
 	records.records[records.index].children++;			// Update child count
+	printf("Element before %s has %d children\n", x->elem, records.records[records.index].children);
 	records.index++;						// Push new record element
-
+	records.records[records.index].children = 0;			// Make sure the children value is reset on opening new stack frame
+	//TODO
+	// When a element is written that has a name that has already been used, and the attributes are the same type, instead of that element one byte is written to show which line
+	// number the original is on, followed by the normal attribute values
 	fwrite(&ff50, sizeof(uint16_t), 1, outFile);			// Write FF 50
 	mapIdNum = checkMap(x->elem, nameLen);				// Write element Name
 	records.records[records.index].mapId = mapIdNum;		// Push map id num onto records stack
@@ -229,6 +243,7 @@ void WriteFF56(yxml_t* x, size_t nameLen, char *attrVal) {
 	uint32_t attrValLen;
 
 	records.records[records.index].children++;	// Update child count of current record
+	printf("Adding child to %s\n", x->elem);
 	fwrite(&ff56, sizeof(uint16_t), 1, outFile);	// Write FF 56
 	checkMap(x->elem, nameLen);			// Write element name
 
@@ -243,6 +258,7 @@ void WriteFF41(yxml_t* x, size_t nameLen, char *attrVal, int numElems) {
 	uint32_t attrValLen;
 
 	records.records[records.index].children++;	// Update child count
+	printf("Adding child to %s\n", x->elem);
 	fwrite(&ff41, sizeof(uint16_t), 1, outFile);	// Write FF41
 	checkMap(x->elem, nameLen);			// Write elem name
 
@@ -268,6 +284,7 @@ void WriteFF70(yxml_t* x) {
 	fseek(outFile, writeAdd,  SEEK_SET);			// Move to the child field of the open tag
 	fwrite(&children, sizeof(uint32_t), 1, outFile);	// Write the child count
 	fseek(outFile, currWriteAdd,  SEEK_SET);		// Return to current write position
+
 
 	records.index--;					// Pop the records stack
 
