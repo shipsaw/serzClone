@@ -19,8 +19,8 @@ typedef struct {
 } record;
 
 typedef struct {
-	record records[30];
-	uint16_t index;		// Does double duty as array index and FF70 return address
+	record record[100];
+	uint16_t idx;		// Does double duty as array index and FF70 return address
 } recordArr;
 
 char* readXML(char*);
@@ -28,7 +28,7 @@ void WritePrelude();
 uint16_t checkMap(char *symbol, size_t length);
 
 void WriteFF50(yxml_t*, size_t, char*);
-void WriteFF50Void(char*);
+void WriteFF50Void(char*, char*);
 void WriteFF56(yxml_t*, size_t, char*);
 void WriteFF41(yxml_t*, size_t, char*, int);
 void WriteFF70(yxml_t*);
@@ -38,7 +38,7 @@ void contWrite(char*, enum contType, int);
 // Global vars
 map_int_t symMap; // symbol map
 FILE *outFile, *xmlDoc; // binary file
-recordArr records;
+recordArr rStack;
 
 int main () {
 	// memory and file variables
@@ -51,11 +51,11 @@ int main () {
 	map_init(&symMap);
 	// user-defined types
 	enum elType elemType;
-	records.index = 0;
+	rStack.idx = 0;
 
 	printf("Opening file..\n");
 	// open xml file
-	if ((xmlDoc = fopen("small.xml", "r")) == NULL) {
+	if ((xmlDoc = fopen("oldTest.xml", "r")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
@@ -72,14 +72,17 @@ int main () {
 	// Initialize record and value-keeping variables
 	yxml_ret_t lastType;
 	enum elType closeTracker;	// closeTracker saves the value of r from the last elemstart/elemclose
+
 	char attrVal[40];		// Attribute value buffer
 	char contVal[200];		// Content value buffer
 	char *attrValIndex = attrVal;	// Attrubute value iterator
 	char *contValIndex = contVal;	// Content value iterator
-	uint8_t ff41ElemCt = 1;		// Two attributes get writtern for ff41, numElements is read first but written second
+
+	uint8_t elemCount = 1;		// Two attributes get writtern for ff41, numElements is read first but written second
 	size_t nameLen;			// Length of x.attr
 	enum contType contType;		// Content type enum
-	char lastName[100];			// Last elem name, saved for void edge case
+	char nextChar;			// Used to store the upcoming char, used to predict and handle void elements
+	char prevChar;			// Used to store prevous char, used to recognize void elements with id's
 
 	// Parse xml
 	for (; *sourceIter; sourceIter++) {
@@ -89,12 +92,16 @@ int main () {
 		if (r != 0) {
 			switch (r) {
 				case YXML_ELEMSTART:
-					ff41ElemCt = 1;				// Reset FF 41 element count to default for other-elem types
+					elemCount = 1;				// Reset FF 41 element count to default for other-elem types
 					nameLen = yxml_symlen(&x, x.elem); 	// Uses the fast yxml function to get length rather than slower strlen
 					closeTracker = ElemOpen;		// No FF 70 if a close is followed by any element open
 					contValIndex = contVal;			// Reset content buffer
-					memcpy(lastName, x.elem, nameLen);
-					lastName[nameLen] = '\0';
+
+					fseek(xmlDoc, x.total, SEEK_SET);				// Seek to the next character to read
+					fread(&nextChar, sizeof(char), 1, xmlDoc);			// Read that character
+					if (nextChar == '>' || nextChar == '\r' || nextChar == '\n') 	// If empty FF50>\r\n or void Element/>
+						WriteFF50(&x, nameLen, NULL);
+
 					break;
 				case YXML_ATTRVAL:
 					*(attrValIndex++) = *x.data;		// Add to value buffer
@@ -102,6 +109,7 @@ int main () {
 				case YXML_ATTREND:
 					*(attrValIndex) = '\0';			// Terminate value buffer string
 					attrValIndex = attrVal; 		// Reset buffer that writes attribute values
+
 					switch (x.attr[2]) {
 						case 'i': 			// If matches d:id
 							WriteFF50(&x, nameLen, attrVal);
@@ -111,40 +119,36 @@ int main () {
 							WriteFF56(&x, nameLen, attrVal);
 							break;
 						case 'n': 			// If matches numElements
-							ff41ElemCt = atoi(attrVal);
+							elemCount = atoi(attrVal);
 							break;
 						case 'e': 			// If matches d:elementType
 							contType = contentType(attrVal);
-							WriteFF41(&x, nameLen, attrVal, ff41ElemCt);
+							WriteFF41(&x, nameLen, attrVal, elemCount);
+						case 'a': 			// alt_encoding
+							break;
+						case 'p':			// precision
 							break;
 					}
 					break;
 				case YXML_CONTENT:
-					if (*(x.data) == '\n' && lastType == YXML_ELEMSTART) {	// If ff50 element with no d:id value
-						for (int i = 0; i < 4; i++) 			// reset the value buffer because an empty element won't clear this
-							attrVal[i] = 0;
-						WriteFF50(&x, nameLen, attrVal);
-					} else if (*(x.data) == ' ' || !isspace(*x.data))  // Eliminate all newline-type characters, but not space
+					if (*(x.data) == ' ' || !isspace(*x.data))  // Eliminate all newline-type characters, but not space
 						*(contValIndex++) = *x.data;
 					break;
 				case YXML_ELEMEND:
 					if (contValIndex != contVal) {				// If there is content to write
 						*contValIndex = '\0';
-						contWrite(contVal, contType, ff41ElemCt);
+						contWrite(contVal, contType, elemCount);
 						contValIndex = contVal;
 					}
-					if (closeTracker == ElemClose) { // If a FF 70, which follows a one-line element close element
+
+					fseek(xmlDoc, x.total - 2, SEEK_SET);		// Seek to the next character to read
+					fread(&prevChar, sizeof(char), 1, xmlDoc);	// Read that character
+					if (prevChar == '/')				// Void elements are followed by ff70's
 						WriteFF70(&x);
-					} else if (lastType == YXML_ELEMSTART) {	// If void element
-						WriteFF50Void(lastName);
-					}
+
+					if (closeTracker == ElemClose) // If a FF 70, which follows a one-line element close element
+						WriteFF70(&x);
 					closeTracker= ElemClose;
-					break;
-				case YXML_PISTART:
-					printf("PISTART\n");
-					break;
-				case YXML_PIEND:
-					printf("PIEND\n");
 					break;
 			}
 			lastType = r;
@@ -201,40 +205,58 @@ void WriteFF50(yxml_t* x, size_t nameLen, char *attrVal) {
 	static uint16_t zero = 0x0;
 	uint16_t mapIdNum;
 
-	records.records[records.index].children++;			// Update child count
-	printf("Element before %s has %d children\n", x->elem, records.records[records.index].children);
-	records.index++;						// Push new record element
-	records.records[records.index].children = 0;			// Make sure the children value is reset on opening new stack frame
+	rStack.record[rStack.idx].children++;			// Update child count
+	rStack.idx++;						// Push new record element
+	//printf("FF50 INC TO %d, %s\n", rStack.idx, x->elem);
+	/*
+	   for (int i = 0; i < rStack.idx; i++) {
+	   printf("%2d ", i);
+	   }
+	   printf("<%s>\n", x->elem);
+	   */
+	rStack.record[rStack.idx].children = 0;			// Make sure the children value is reset on opening new stack frame
 	//TODO
 	// When a element is written that has a name that has already been used, and the attributes are the same type, instead of that element one byte is written to show which line
 	// number the original is on, followed by the normal attribute values
 	fwrite(&ff50, sizeof(uint16_t), 1, outFile);			// Write FF 50
 	mapIdNum = checkMap(x->elem, nameLen);				// Write element Name
-	records.records[records.index].mapId = mapIdNum;		// Push map id num onto records stack
+	rStack.record[rStack.idx].mapId = mapIdNum;		// Push map id num onto records stack
 
-	int numVal = atoi(attrVal);					// Convert id value to int
-	fwrite(&numVal, sizeof(uint32_t), 1, outFile);			// Write id value
-	records.records[records.index].childrenAdd = ftell(outFile);	// Save the address where the blank children value was written, for future updating
+	if (attrVal) {
+		int numVal = atoi(attrVal);					// Convert id value to int
+		fwrite(&numVal, sizeof(uint32_t), 1, outFile);			// Write id value
+	} else {
+		fwrite(&zero, sizeof(uint32_t), 1, outFile);			// Write id value
+	}
+	rStack.record[rStack.idx].childrenAdd = ftell(outFile);	// Save the address where the blank children value was written, for future updating
 	fwrite(&zero, sizeof(uint32_t), 1, outFile);			// Write blank children value
 
 	return;
 }
 
-void WriteFF50Void(char* lastName) {
+void WriteFF50Void(char* lastName, char* attrVal) {
 	static uint16_t ff50 = 0x50FF;
 	static uint16_t ff70 = 0x70FF;
 	static uint64_t zero = 0;
 	uint16_t mapIdNum;
 
-	records.records[records.index].children++;			// Update child count
+	rStack.record[rStack.idx].children++;			// Update child count
+	rStack.idx++;
+	//printf("FF50 INC TO %d, %s\n", rStack.idx, lastName);
 
+	/*
+	   for (int i = 0; i < rStack.idx; i++) {
+	   printf("%2d ", i);
+	   }
+	   printf("<%s> VOID\n", lastName);
+	   */
 	fwrite(&ff50, sizeof(uint16_t), 1, outFile);			// Write FF 50
 	mapIdNum = checkMap(lastName, strlen(lastName));		// Write element Name
 
-	fwrite(&zero, sizeof(uint64_t), 1, outFile);			// Write blank id and children value
-	fwrite(&ff70, sizeof(uint16_t), 1, outFile);
-	fwrite(&mapIdNum, sizeof(uint16_t), 1, outFile);
-
+	int numVal = atoi(attrVal);					// Convert id value to int
+	fwrite(&numVal, sizeof(uint32_t), 1, outFile);			// Write id value
+	rStack.record[rStack.idx].childrenAdd = ftell(outFile);	// Save the address where the blank children value was written, for future updating
+	fwrite(&zero, sizeof(uint32_t), 1, outFile);			// Write blank children value
 	return;
 }
 
@@ -242,13 +264,18 @@ void WriteFF56(yxml_t* x, size_t nameLen, char *attrVal) {
 	static uint16_t ff56 = 0x56FF;
 	uint32_t attrValLen;
 
-	records.records[records.index].children++;	// Update child count of current record
-	printf("Adding child to %s\n", x->elem);
+	rStack.record[rStack.idx].children++;	// Update child count of current record
 	fwrite(&ff56, sizeof(uint16_t), 1, outFile);	// Write FF 56
 	checkMap(x->elem, nameLen);			// Write element name
 
 	attrValLen = strlen(attrVal);			// Get Length of type value
 	checkMap(attrVal, attrValLen);			// Write type value
+	/*
+	   for (int i = 0; i < rStack.idx; i++) {
+	   printf("%2d ", i);
+	   }
+	   printf("<%s>\n", x->elem);
+	   */
 
 	return;
 }
@@ -257,14 +284,19 @@ void WriteFF41(yxml_t* x, size_t nameLen, char *attrVal, int numElems) {
 	static uint16_t ff41 = 0x41FF;
 	uint32_t attrValLen;
 
-	records.records[records.index].children++;	// Update child count
-	printf("Adding child to %s\n", x->elem);
+	rStack.record[rStack.idx].children++;	// Update child count
 	fwrite(&ff41, sizeof(uint16_t), 1, outFile);	// Write FF41
 	checkMap(x->elem, nameLen);			// Write elem name
 
 	attrValLen = strlen(attrVal);			// Get Length of type value
 	checkMap(attrVal, attrValLen);			// Write type value
 	fwrite(&numElems, sizeof(char), 1, outFile);	// Write content count
+	/*
+	   for (int i = 0; i < rStack.idx; i++) {
+	   printf("%2d ", i);
+	   }
+	   printf("<%s>\n", x->elem);
+	   */
 
 	return;
 }
@@ -272,10 +304,10 @@ void WriteFF41(yxml_t* x, size_t nameLen, char *attrVal, int numElems) {
 void WriteFF70(yxml_t* x) {
 	static uint16_t ff70 = 0x70FF;
 	long currWriteAdd;
-	uint16_t mapIdNum = records.records[records.index].mapId;
+	uint16_t mapIdNum = rStack.record[rStack.idx].mapId;
 
-	long writeAdd = records.records[records.index].childrenAdd;
-	int children = records.records[records.index].children;
+	long writeAdd = rStack.record[rStack.idx].childrenAdd;
+	int children = rStack.record[rStack.idx].children;
 
 	fwrite(&ff70, sizeof(uint16_t), 1, outFile);		// Write FF 70
 	fwrite(&mapIdNum, sizeof(uint16_t), 1, outFile);	// Write return line
@@ -286,7 +318,14 @@ void WriteFF70(yxml_t* x) {
 	fseek(outFile, currWriteAdd,  SEEK_SET);		// Return to current write position
 
 
-	records.index--;					// Pop the records stack
+	rStack.idx--;					// Pop the records stack
+	//printf("FF70 DEC TO %d, %s\n", rStack.idx, x->elem);
+	/*
+	   for (int i = 0; i < rStack.idx; i++) {
+	   printf("%2d ", i);
+	   }
+	   printf("<%s>\n", x->elem);
+	   */
 
 	return;
 }
