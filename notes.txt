@@ -1,8 +1,17 @@
-Every bin begins with the letters "SERZ"
+Every bin begins with the letters "SERZ", followed by the bytes 00 00 01 00.
 
-	A newline is indicated by 0xFF, and depending on the following three bits means several different things.  The order of the attributes is important.
-	FF 50 FF FF is a line that has children, and has the optional attribute "d:id"
-	The full format is: FF FF 50 FF, 4 bytes to indicate tag name length, tag name, d:id attribute value, 4 bytes to indicate number of children
+The xml Declaration is the bytes FF 43 00 0c 00 00 00
+
+Now onto the actual content..
+
+	serz compresses the xml document by eliminating repeated symbols.  It does this two ways: 
+	1)	When reading the xml, any string that needs to be saved is put in a hash map upon first reading, with the value being a 16-bit counter that increments for each new symbol.  When the symbol key is come across in future readings, the value is substituted.  If it is the first time this symbol is seen, it is added to the map and then written as the following format:  Two bytes of \xFF indicate that this is a new symbol.  The length of the symbol follows in unsigned 32-bit format.  Finally, the ascii characters themselves are written out.
+	2)	Every element's name and important attribute values also hashed to a number, but this one is 8-bit and is the line number where the line is first encountered.
+
+Different element types.. 
+	A newline is indicated by 0xFF, and depending on the following bit means several different things.  The order of the attributes is important.
+	FF 50 is a line that has children, and has the optional attribute "d:id"
+	The full format is: FF 50, two bytes we will cover later, 4 bytes to indicate tag name length, tag name, d:id attribute value, 4 bytes to indicate number of children
 	If a ff 50 has no children, it is a closed tag with format <[tagname]/>
 
 	FF 56 FF FF is a line that has no children, and the optional attributes are: "d:type d:precision d:alt_encoding"
