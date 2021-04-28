@@ -23,20 +23,26 @@ typedef struct {
 	uint16_t idx;		// Does double duty as array index and FF70 return address
 } recordArr;
 
-char* readXML(char*);
-void WritePrelude();
-uint16_t checkMap(char *symbol, size_t length);
 
+char* readXML(char*);
+
+void WritePrelude();
 void WriteFF50(yxml_t*, size_t, char*);
 void WriteFF50Void(char*, char*);
 void WriteFF56(yxml_t*, size_t, char*);
 void WriteFF41(yxml_t*, size_t, char*, int);
 void WriteFF70(yxml_t*);
+
+uint16_t checkSym(char *symbol, size_t length);
+int checkElem(yxml_t*, char*, uint8_t*);
+
+
 enum contType contentType(char*);
 void contWrite(char*, enum contType, int);
 
 // Global vars
-map_int_t symMap; // symbol map
+map_int_t symMap; 	// symbol map
+map_int_t elemMap;	// element map
 FILE *outFile, *xmlDoc; // binary file
 recordArr rStack;
 
@@ -44,11 +50,15 @@ int main () {
 	// memory and file variables
 	void *buf = malloc(BUFSIZE);
 	char *source = NULL;
+
 	// yxml variables
 	yxml_t x;
 	yxml_init(&x, buf, BUFSIZE);
+
 	// map variables
 	map_init(&symMap);
+	map_init(&elemMap);
+
 	// user-defined types
 	enum elType elemType;
 	rStack.idx = 0;
@@ -60,7 +70,7 @@ int main () {
 		exit(1);
 	}
 	// Open bin file
-	if ((outFile = fopen("small.bin", "wb")) == NULL) {
+	if ((outFile = fopen("oldTest.bin", "wb")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
@@ -218,9 +228,12 @@ void WriteFF50(yxml_t* x, size_t nameLen, char *attrVal) {
 	//TODO
 	// When a element is written that has a name that has already been used, and the attributes are the same type, instead of that element one byte is written to show which line
 	// number the original is on, followed by the normal attribute values
+	//if (checkElem(
 	fwrite(&ff50, sizeof(uint16_t), 1, outFile);			// Write FF 50
-	mapIdNum = checkMap(x->elem, nameLen);				// Write element Name
+	mapIdNum = checkSym(x->elem, nameLen);				// Write element Name
 	rStack.record[rStack.idx].mapId = mapIdNum;		// Push map id num onto records stack
+
+	checkElem(x, attrVal, NULL);
 
 	if (attrVal) {
 		int numVal = atoi(attrVal);					// Convert id value to int
@@ -251,7 +264,7 @@ void WriteFF50Void(char* lastName, char* attrVal) {
 	   printf("<%s> VOID\n", lastName);
 	   */
 	fwrite(&ff50, sizeof(uint16_t), 1, outFile);			// Write FF 50
-	mapIdNum = checkMap(lastName, strlen(lastName));		// Write element Name
+	mapIdNum = checkSym(lastName, strlen(lastName));		// Write element Name
 
 	int numVal = atoi(attrVal);					// Convert id value to int
 	fwrite(&numVal, sizeof(uint32_t), 1, outFile);			// Write id value
@@ -266,10 +279,10 @@ void WriteFF56(yxml_t* x, size_t nameLen, char *attrVal) {
 
 	rStack.record[rStack.idx].children++;	// Update child count of current record
 	fwrite(&ff56, sizeof(uint16_t), 1, outFile);	// Write FF 56
-	checkMap(x->elem, nameLen);			// Write element name
+	checkSym(x->elem, nameLen);			// Write element name
 
 	attrValLen = strlen(attrVal);			// Get Length of type value
-	checkMap(attrVal, attrValLen);			// Write type value
+	checkSym(attrVal, attrValLen);			// Write type value
 	/*
 	   for (int i = 0; i < rStack.idx; i++) {
 	   printf("%2d ", i);
@@ -286,10 +299,10 @@ void WriteFF41(yxml_t* x, size_t nameLen, char *attrVal, int numElems) {
 
 	rStack.record[rStack.idx].children++;	// Update child count
 	fwrite(&ff41, sizeof(uint16_t), 1, outFile);	// Write FF41
-	checkMap(x->elem, nameLen);			// Write elem name
+	checkSym(x->elem, nameLen);			// Write elem name
 
 	attrValLen = strlen(attrVal);			// Get Length of type value
-	checkMap(attrVal, attrValLen);			// Write type value
+	checkSym(attrVal, attrValLen);			// Write type value
 	fwrite(&numElems, sizeof(char), 1, outFile);	// Write content count
 	/*
 	   for (int i = 0; i < rStack.idx; i++) {
@@ -331,7 +344,7 @@ void WriteFF70(yxml_t* x) {
 }
 
 // Check for symbol in map
-uint16_t checkMap(char* symbol, size_t length) {
+uint16_t checkSym(char* symbol, size_t length) {
 	static int mapIter = 0;					// Value to reference the string, increments every map addition
 	static uint16_t ff = 0xFFFF;				// Prelude for not-found symbol write
 
@@ -346,6 +359,27 @@ uint16_t checkMap(char* symbol, size_t length) {
 		map_set(&symMap, symbol, mapIter);		// Since this was a map miss, add symbol to map
 		return mapIter++;
 	}
+}
+
+// checkElem takes the concatinated element name and attribute values and, if a duplicate,
+// replaces them with the line number where this element is first found
+int checkElem(yxml_t* x, char *attr, uint8_t *elemCount) {
+	char elem[100] = {'\0'};
+
+	strcat(elem, x->elem);
+	strcat(elem, x->attr);
+	printf("elem: %s\n", elem);
+	/*
+	int *val = map_get(&elemMap, elem);
+	if (val) {
+		fwrite(val, sizeof(uint16_t), 1, outFile);
+		return 1;
+	} else {
+		map_set(&elemMap, elem, x->line);
+		return 0;
+	}
+	*/
+	return 0;
 }
 
 enum contType contentType(char* type) {
@@ -405,7 +439,7 @@ void contWrite(char* content, enum contType type, int count) {
 				fwrite(&float32, sizeof(uint32_t), 1, outFile);
 				break;
 			case cDeltaString:
-				checkMap(content, strlen(content));
+				checkSym(content, strlen(content));
 				break;
 			case sUInt64:
 				uint64 = strtoll(content, NULL, 10);
