@@ -42,17 +42,16 @@ int main (int argc, char** argv) {
 		}
 	}
 
-	char outFileName[strlen(argv[1])];
-	strcpy(outFileName, argv[1]);
-	swapFilename(outFileName);
+	char outFileName[strlen(argc[1])];
+	outFileName = swapFilename(argc[1]);
 
 	// Open bin file
-	if ((outFile = fopen(outFileName, "wb")) == NULL) {
+	if ((outFile = fopen("oldTest.bin", "wb")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
 
-	printf("Converting %s to %s...\n", argv[1], outFileName);
+	printf("Converting %s to %s...\n", argv[1], argv[1]);
 	source = readXML(source);
 	char *sourceIter = source;	// Makes sure we save the original source pointer for freeing
 

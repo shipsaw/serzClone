@@ -33,3 +33,6 @@ int checkElem(yxml_t*, char*);
 
 void contWrite(char*, contType, int);
 contType contentType(char* type);
+
+char* fileType(char *filename);
+void swapFilename(char *filename);

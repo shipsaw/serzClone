@@ -43,8 +43,8 @@ int main (int argc, char** argv) {
 	}
 
 	char outFileName[strlen(argv[1])];
-	strcpy(outFileName, argv[1]);
-	swapFilename(outFileName);
+	strcpy(outFileName, argc[1]);
+	swapFilename(&outFileName);
 
 	// Open bin file
 	if ((outFile = fopen(outFileName, "wb")) == NULL) {
