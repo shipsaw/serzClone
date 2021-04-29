@@ -6,46 +6,15 @@
 #include <string.h>
 #include "yxml.h"
 #include "map.h"
-
-#define BUFSIZE 4096
-
-enum elType {ElemOpen, ElemClose, Other};					// Used to track enums we care about while ignoring others
-enum contType {boolean, sUInt8, sInt32, sFloat32, sUInt64, cDeltaString};	// Content type
-
-typedef struct {
-	uint32_t children; 	// uint32 because that's the format it is written in the bin file
-	uint16_t mapId;		// Id value of element name, used when calling FF 70
-	long childrenAdd;  	// long based on the type of bufsize
-} record;
-
-typedef struct {
-	record record[100];
-	uint16_t idx;		// Does double duty as array index and FF70 return address
-} recordArr;
-
-
-char* readXML(char*);
-
-void WritePrelude();
-void WriteFF50(yxml_t*, size_t, char*);
-void WriteFF56(yxml_t*, size_t, char*);
-void WriteFF41(yxml_t*, size_t, char*, int);
-void WriteFF70(yxml_t*);
-
-uint16_t checkSym(char*, size_t);
-int checkElem(yxml_t*, char*);
-
-
-enum contType contentType(char*);
-void contWrite(char*, enum contType, int);
+#include "serz.h"
 
 // Global vars
 map_int_t symMap; 	// symbol map
 map_int_t elemMap;	// element map
 FILE *outFile, *xmlDoc; // binary file
-recordArr rStack;
+recordArr rStack;	// stack of open xml elements
 
-int main () {
+int main (int argc, char** argv) {
 	// memory and file variables
 	void *buf = malloc(BUFSIZE);
 	char *source = NULL;
@@ -59,20 +28,26 @@ int main () {
 	map_init(&elemMap);
 
 	// user-defined types
-	enum elType elemType;
+	elType elemType;
 	rStack.idx = 0;
 
-	printf("Opening file..\n");
 	// open xml file
-	if ((xmlDoc = fopen("oldTest.xml", "r")) == NULL) {
-		printf("\nError opening file\n");
+	if (argc <= 1 || argc > 3) {
+		printf("Usage: serz infile /{bin,xml}:outfile\nOr: serz infile\n");
 		exit(1);
+	} else {
+		if ((xmlDoc = fopen(argv[1], "r")) == NULL) {
+			printf("\nError opening file\n");
+			exit(1);
+		}
 	}
 	// Open bin file
 	if ((outFile = fopen("oldTest.bin", "wb")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
+
+	printf("Converting %s to %s...\n", argv[1], argv[1]);
 	source = readXML(source);
 	char *sourceIter = source;	// Makes sure we save the original source pointer for freeing
 
@@ -80,7 +55,7 @@ int main () {
 
 	// Initialize record and value-keeping variables
 	yxml_ret_t lastType;		// Saves whether ElemOpen or ElemClosed was the most recently read
-	enum elType closeTracker;	// closeTracker saves the value of r from the last elemstart/elemclose
+	elType closeTracker;	// closeTracker saves the value of r from the last elemstart/elemclose
 
 	char attrVal[40];		// Attribute value buffer
 	char contVal[200];		// Content value buffer
@@ -89,7 +64,7 @@ int main () {
 
 	uint8_t elemCount = 1;		// Two attributes get writtern for ff41, numElements is read first but written second
 	size_t nameLen;			// Length of x.attr
-	enum contType contType;		// Content type enum
+	contType retContType;		// Content type returned from content type function
 	char nextChar;			// Used to store the upcoming char, used to predict and handle void elements
 	char prevChar;			// Used to store prevous char, used to recognize void elements with id's
 
@@ -124,14 +99,14 @@ int main () {
 							WriteFF50(&x, nameLen, attrVal);
 							break;
 						case 't': 			// If matches d:type
-							contType = contentType(attrVal);
+							retContType = contentType(attrVal);
 							WriteFF56(&x, nameLen, attrVal);
 							break;
 						case 'n': 			// If matches numElements
 							elemCount = atoi(attrVal);
 							break;
 						case 'e': 			// If matches d:elementType
-							contType = contentType(attrVal);
+							retContType = contentType(attrVal);
 							WriteFF41(&x, nameLen, attrVal, elemCount);
 						case 'a': 			// alt_encoding
 							break;
@@ -146,7 +121,7 @@ int main () {
 				case YXML_ELEMEND:
 					if (contValIndex != contVal) {				// If there is content to write
 						*contValIndex = '\0';
-						contWrite(contVal, contType, elemCount);
+						contWrite(contVal, retContType, elemCount);
 						contValIndex = contVal;
 					}
 
@@ -163,7 +138,7 @@ int main () {
 			lastType = r;
 		}
 	}
-	printf("Done.\n");
+	printf("Conversion complete\n");
 	free(source);
 	fclose(xmlDoc);
 	fclose(outFile);
@@ -203,6 +178,7 @@ void WritePrelude() {
 	static uint32_t prelude4 = 0;
 	fwrite(prelude1, sizeof(char), sizeof(4), outFile);
 	fwrite(&prelude2, sizeof(uint32_t), 1, outFile);
+	// TODO Check for xml start element, if so write this next part of the prelude
 	//fwrite(&prelude3, sizeof(uint32_t), 1, outFile);
 	//fwrite(&prelude4, sizeof(char), 3, outFile);
 	return;
@@ -216,21 +192,10 @@ void WriteFF50(yxml_t* x, size_t nameLen, char *attrVal) {
 
 	rStack.record[rStack.idx].children++;			// Update child count
 	rStack.idx++;						// Push new record element
-
-	//printf("FF50 INC TO %d, %s\n", rStack.idx, x->elem);
-	/*
-	   for (int i = 0; i < rStack.idx; i++) {
-	   printf("%2d ", i);
-	   }
-	   printf("<%s>\n", x->elem);
-	   */
 	rStack.record[rStack.idx].children = 0;			// Make sure the children value is reset on opening new stack frame
-	//TODO
-	// When a element is written that has a name that has already been used, and the attributes are the same type, instead of that element one byte is written to show which line
-	// number the original is on, followed by the normal attribute values
-	//if (checkElem(
-	if (!checkElem(x, x->elem)) {
-	fwrite(&ff50, sizeof(uint16_t), 1, outFile);			// Write FF 50
+
+	if (!checkElem(x, x->elem)) {				// Check for element duplicates, 
+	fwrite(&ff50, sizeof(uint16_t), 1, outFile);			// If first instance of this element..
 	mapIdNum = checkSym(x->elem, nameLen);				// Write element Name
 	rStack.record[rStack.idx].mapId = mapIdNum;		// Push map id num onto records stack
 	}
@@ -264,12 +229,6 @@ void WriteFF56(yxml_t* x, size_t nameLen, char *attrVal) {
 
 	checkSym(attrVal, attrValLen);			// Write type value
 	}
-	/*
-	   for (int i = 0; i < rStack.idx; i++) {
-	   printf("%2d ", i);
-	   }
-	   printf("<%s>\n", x->elem);
-	   */
 
 	return;
 }
@@ -292,12 +251,6 @@ void WriteFF41(yxml_t* x, size_t nameLen, char *attrVal, int numElems) {
 	}
 
 	fwrite(&numElems, sizeof(char), 1, outFile);	// Write content count
-	/*
-	   for (int i = 0; i < rStack.idx; i++) {
-	   printf("%2d ", i);
-	   }
-	   printf("<%s>\n", x->elem);
-	   */
 
 	return;
 }
@@ -325,13 +278,6 @@ void WriteFF70(yxml_t* x) {
 
 
 	rStack.idx--;					// Pop the records stack
-	//printf("FF70 DEC TO %d, %s\n", rStack.idx, x->elem);
-	/*
-	   for (int i = 0; i < rStack.idx; i++) {
-	   printf("%2d ", i);
-	   }
-	   printf("<%s>\n", x->elem);
-	   */
 
 	return;
 }
@@ -368,7 +314,7 @@ int checkElem(yxml_t *x, char* symbol) {
 	}
 }
 
-enum contType contentType(char* type) {
+contType contentType(char* type) {
 	if (strcmp(type, "bool") == 0) {
 		return boolean;
 	} else if(strcmp(type, "sUInt8") == 0) {
@@ -387,7 +333,7 @@ enum contType contentType(char* type) {
 	}
 }
 
-void contWrite(char* content, enum contType type, int count) {
+void contWrite(char* content, contType type, int count) {
 	static int bool0 = 0;
 	static int bool1 = 1;
 
