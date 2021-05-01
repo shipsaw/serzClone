@@ -72,6 +72,7 @@ int main (int argc, char** argv) {
 	contType retContType;		// Content type returned from content type function
 	char nextChar;			// Used to store the upcoming char, used to predict and handle void elements
 	char prevChar;			// Used to store prevous char, used to recognize void elements with id's
+   uint64_t seekAdjust = 0;      // Adjusts for strange bug in x.total property
 
 	// Parse xml
 	for (; *sourceIter; sourceIter++) {
@@ -86,11 +87,10 @@ int main (int argc, char** argv) {
 					closeTracker = ElemOpen;		// No FF 70 if a close is followed by any element open
 					contValIndex = contVal;			// Reset content buffer
 
-					fseek(xmlDoc, x.total, SEEK_SET);				// Seek to the next character to read
+					fseek(xmlDoc, x.total + seekAdjust++, SEEK_SET);				// Seek to the next character to read
 					fread(&nextChar, sizeof(char), 1, xmlDoc);			// Read that character
 					if (nextChar == '>' || nextChar == '\r' || nextChar == '\n') 	// If empty FF50>\r\n or void Element/>
 						WriteFF50(&x, nameLen, NULL);
-
 					break;
 				case YXML_ATTRVAL:
 					*(attrValIndex++) = *x.data;		// Add to value buffer
