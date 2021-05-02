@@ -72,7 +72,8 @@ int main (int argc, char** argv) {
 	contType retContType;		// Content type returned from content type function
 	char nextChar;			// Used to store the upcoming char, used to predict and handle void elements
 	char prevChar;			// Used to store prevous char, used to recognize void elements with id's
-   uint64_t seekAdjust = 0;      // Adjusts for strange bug in x.total property
+   uint64_t seekAdjust;      // Adjusts for but in yxml where a newline somehow throws the "total" property off by one 
+                                 // every time
 
 	// Parse xml
 	for (; *sourceIter; sourceIter++) {
@@ -80,6 +81,7 @@ int main (int argc, char** argv) {
 		if (r < 0)
 			exit(1);
 		if (r != 0) {
+            seekAdjust = x.line - 2;   // Account for newline "total" error
 			switch (r) {
 				case YXML_ELEMSTART:
 					elemCount = 1;				// Reset FF 41 element count to default for other-elem types
@@ -87,7 +89,7 @@ int main (int argc, char** argv) {
 					closeTracker = ElemOpen;		// No FF 70 if a close is followed by any element open
 					contValIndex = contVal;			// Reset content buffer
 
-					fseek(xmlDoc, x.total + seekAdjust++, SEEK_SET);				// Seek to the next character to read
+					fseek(xmlDoc, x.total + seekAdjust, SEEK_SET);				// Seek to the next character to read
 					fread(&nextChar, sizeof(char), 1, xmlDoc);			// Read that character
 					if (nextChar == '>' || nextChar == '\r' || nextChar == '\n') 	// If empty FF50>\r\n or void Element/>
 						WriteFF50(&x, nameLen, NULL);
@@ -224,7 +226,7 @@ void WriteFF56(yxml_t* x, size_t nameLen, char *attrVal) {
 
 	size_t elemKeyLen = nameLen + attrValLen + 1;
 	char elemKey[elemKeyLen];		// name+attribute key used for element replacement lookup
-	strcat(elemKey, x->elem);
+	strcpy(elemKey, x->elem);
 	strcat(elemKey, attrVal);
 
 	rStack.record[rStack.idx].children++;	// Update child count of current record
@@ -244,7 +246,7 @@ void WriteFF41(yxml_t* x, size_t nameLen, char *attrVal, int numElems) {
 	attrValLen = strlen(attrVal);			// Get Length of type value
 	size_t elemKeyLen = nameLen + attrValLen + 1;
 	char elemKey[elemKeyLen];			// name+attribute key used for element replacement lookup
-	strcat(elemKey, x->elem);
+	strcpy(elemKey, x->elem);
 	strcat(elemKey, attrVal);
 
 	rStack.record[rStack.idx].children++;		// Update child count
