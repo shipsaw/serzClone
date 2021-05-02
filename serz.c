@@ -184,8 +184,8 @@ void WritePrelude() {
 	fwrite(prelude1, sizeof(char), sizeof(4), outFile);
 	fwrite(&prelude2, sizeof(uint32_t), 1, outFile);
 	// TODO Check for xml start element, if so write this next part of the prelude
-	//fwrite(&prelude3, sizeof(uint32_t), 1, outFile);
-	//fwrite(&prelude4, sizeof(char), 3, outFile);
+	fwrite(&prelude3, sizeof(uint32_t), 1, outFile);
+	fwrite(&prelude4, sizeof(char), 3, outFile);
 	return;
 }
 

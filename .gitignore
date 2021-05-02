@@ -5,3 +5,5 @@
 *.swp
 tags
 serz
+*.exe
+*.dll
