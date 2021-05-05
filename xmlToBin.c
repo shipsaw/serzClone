@@ -12,8 +12,15 @@
 map_int_t symMap; 	// symbol map
 map_int_t elemMap;	// element map
 recordArr rStack;	// stack of open xml elements
+FILE *outFile;
 
-int xmlToBin (char *source, char *outfile, ) {
+int xmlToBin (FILE *xmlFile, FILE *binFile) {
+	outFile = binFile;
+	void *buf = malloc(BUFSIZE);	// Buffer to store yxml parsing struct
+	char *source = NULL;		// Buffer where we will read the xml to
+
+	source = readInfile(xmlFile);
+	char *sourceIter = source;	// Makes sure we save the original source pointer for freeing
 
 	// yxml variables
 	yxml_t x;
@@ -60,8 +67,8 @@ int xmlToBin (char *source, char *outfile, ) {
 					closeTracker = ElemOpen;		// No FF 70 if a close is followed by any element open
 					contValIndex = contVal;			// Reset content buffer
 
-					fseek(xmlDoc, x.total + seekAdjust, SEEK_SET);				// Seek to the next character to read
-					fread(&nextChar, sizeof(char), 1, xmlDoc);			// Read that character
+					fseek(xmlFile, x.total + seekAdjust, SEEK_SET);				// Seek to the next character to read
+					fread(&nextChar, sizeof(char), 1, xmlFile);			// Read that character
 					if (nextChar == '>' || nextChar == '\r' || nextChar == '\n') 	// If empty FF50>\r\n or void Element/>
 						WriteFF50(&x, nameLen, NULL);
 					break;
@@ -103,8 +110,8 @@ int xmlToBin (char *source, char *outfile, ) {
 						contValIndex = contVal;
 					}
 
-					fseek(xmlDoc, x.total - 2, SEEK_SET);		// Seek to the next character to read
-					fread(&prevChar, sizeof(char), 1, xmlDoc);	// Read that character
+					fseek(xmlFile, x.total - 2, SEEK_SET);		// Seek to the next character to read
+					fread(&prevChar, sizeof(char), 1, xmlFile);	// Read that character
 					if (prevChar == '/')				// Void elements are followed by ff70's
 						WriteFF70(&x);
 
@@ -118,7 +125,7 @@ int xmlToBin (char *source, char *outfile, ) {
 	}
 	printf("Conversion complete\n");
 	free(source);
-	fclose(xmlDoc);
+	fclose(xmlFile);
 	fclose(outFile);
 	return 0;
 }

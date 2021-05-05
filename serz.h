@@ -23,6 +23,7 @@ typedef enum {boolean, sUInt8, sInt32, sFloat32, sUInt64, cDeltaString} contType
 
 
 char* readInfile(FILE*);
+int xmlToBin(FILE*, FILE*);
 
 void WritePrelude();
 void WriteFF50(yxml_t*, size_t, char*);

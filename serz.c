@@ -6,8 +6,7 @@
 int main (int argc, char** argv) {
 
 	// memory and file variables
-	FILE *outFile, *infile; 
-	void *buf = malloc(BUFSIZE);
+	FILE *outfile, *infile; 
 	char *source = NULL;
 
 	// open source file
@@ -21,26 +20,25 @@ int main (int argc, char** argv) {
 		}
 	}
 
-	char outFileName[strlen(argv[1])];
-	strcpy(outFileName, argv[1]);
-	swapFilename(outFileName);
+	char outfileName[strlen(argv[1])];
+	strcpy(outfileName, argv[1]);
+	swapFilename(outfileName);
 
 	// Open output file
-	if ((outFile = fopen(outFileName, "wb")) == NULL) {
+	if ((outfile = fopen(outfileName, "wb")) == NULL) {
 		printf("\nError opening file\n");
 		exit(1);
 	}
 
-	printf("Converting %s to %s...\n", argv[1], outFileName);
-	source = readInfile(infile);
-	char *sourceIter = source;	// Makes sure we save the original source pointer for freeing
+	printf("Converting %s to %s...\n", argv[1], outfileName);
 
 	// TODO: if-statement to determine which way this converison is going
+	xmlToBin(infile, outfile);
 	printf("Success\n");
 	return 0;
 }
 
-// Given a pointer, does proper allocation and reads the xml file into the memory
+// Given a pointer, does proper allocation and reads the file into the memory
 char* readInfile(FILE* infile) {
 	char* buf;
 	// Read xml bytes
