@@ -1,6 +1,9 @@
+
 #ifndef SERZ_H
 #define SERZ_H
 #endif
+
+#include"yxml.h"
 
 #define BUFSIZE 4096
 
@@ -19,7 +22,7 @@ typedef enum {ElemOpen, ElemClose, Other} elType ;					// Used to track enums we
 typedef enum {boolean, sUInt8, sInt32, sFloat32, sUInt64, cDeltaString} contType ;	// Content type
 
 
-char* readXML(char*);
+char* readInfile(FILE*);
 
 void WritePrelude();
 void WriteFF50(yxml_t*, size_t, char*);
