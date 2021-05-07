@@ -31,6 +31,7 @@ int main (int argc, char** argv) {
 	}
 
 	printf("Converting %s to %s...\n", argv[1], outfileName);
+	printf("Filetype of input: %c\n", *fileType(argv[1]));
 
 	// TODO: if-statement to determine which way this converison is going
 	xmlToBin(infile, outfile);
