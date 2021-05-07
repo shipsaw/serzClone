@@ -4,6 +4,7 @@
 #endif
 
 #include"yxml.h"
+#include<stdio.h>
 
 #define BUFSIZE 4096
 
