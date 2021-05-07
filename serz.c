@@ -30,11 +30,14 @@ int main (int argc, char** argv) {
 		exit(1);
 	}
 
-	printf("Converting %s to %s...\n", argv[1], outfileName);
-	printf("Filetype of input: %c\n", *fileType(argv[1]));
+	if (*fileType(argv[1]) == 'x') {			// xml to bin or bin to xml?
+		printf("Converting xml to bin\n");
+		xmlToBin(infile, outfile);
+	} else {
+		printf("Converting bin to xml\n");
+		binToXml(infile, outfile);
+	}
 
-	// TODO: if-statement to determine which way this converison is going
-	xmlToBin(infile, outfile);
 	printf("Success\n");
 	return 0;
 }

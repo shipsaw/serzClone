@@ -25,6 +25,7 @@ typedef enum {boolean, sUInt8, sInt32, sFloat32, sUInt64, cDeltaString} contType
 
 char* readInfile(FILE*);
 int xmlToBin(FILE*, FILE*);
+int binToXml(FILE*, FILE*);
 
 void WritePrelude();
 void WriteFF50(yxml_t*, size_t, char*);
@@ -41,3 +42,5 @@ contType contentType(char* type);
 
 char* fileType(char *filename);
 void swapFilename(char *filename);
+long getFileSize(FILE *binFile);
+int checkPrelude(char*);

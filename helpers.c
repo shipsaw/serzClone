@@ -9,13 +9,16 @@ char* readInfile(FILE* infile) {
 	if (fseek(infile, 0L, SEEK_END) == 0) {
 		/* Get the size of the file. */
 		long bufsize = ftell(infile);
-		if (bufsize == -1) { /* Error */ }
-
+		if (bufsize == -1) {
+			exit(1);
+		}
 		/* Allocate our buffer to that size. */
 		buf = malloc(sizeof(char) * (bufsize + 1));
 
 		/* Go back to the start of the file. */
-		if (fseek(infile, 0L, SEEK_SET) != 0) { /* Error */ }
+		if (fseek(infile, 0L, SEEK_SET) != 0) {
+			exit(1);
+		}
 
 		/* Read the entire file into memory. */
 		size_t newLen = fread(buf, sizeof(char), bufsize, infile);
@@ -74,4 +77,17 @@ void swapFilename(char *filename) {
 			break;
 	}
 	return;
+}
+
+long getFileSize(FILE *binFile) {
+	long bufsize;
+	if (fseek(binFile, 0L, SEEK_END) == 0) {		// Find the size of the binary file
+		bufsize = ftell(binFile);
+		if (bufsize == -1) {
+			return -1;
+		}
+	} else {
+		return -1;
+	}
+	return bufsize;
 }
