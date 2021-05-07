@@ -27,6 +27,7 @@ char* readInfile(FILE*);
 int xmlToBin(FILE*, FILE*);
 int binToXml(FILE*, FILE*);
 
+// xmlToBin
 void WritePrelude();
 void WriteFF50(yxml_t*, size_t, char*);
 void WriteFF56(yxml_t*, size_t, char*);
@@ -44,3 +45,6 @@ char* fileType(char *filename);
 void swapFilename(char *filename);
 long getFileSize(FILE *binFile);
 int checkPrelude(char*);
+
+// binToXml
+void processFF(char *source, long i);

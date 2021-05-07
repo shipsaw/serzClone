@@ -18,7 +18,7 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 
 	char *source = NULL;
 	source = readInfile(binFile);
-	char *sourceIter = source;	// Use original malloc pointer for free later
+	char *sourceIter = source;	// Use original malloc pointer for free later TODO Necessary?
 
 	long fileSize = getFileSize(binFile);
 
@@ -26,9 +26,13 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 		printf("Incorrect Prelude\n");
 		exit(1);
 	}
-	printf("Prelude correct\n");
+
 	for (long i = 8; i < fileSize; i++) {
-		printf("%c", sourceIter[i]);
+		switch (source[i]) {
+			case '\xFF':
+				processFF(source, i);
+				break;
+		}
 	}
 	printf("\n");
 	return 0;
@@ -42,4 +46,22 @@ int checkPrelude(char* source) {
 		}
 	}
 	return 1;
+}
+
+void processFF(char *source, long i) {
+	switch (source[i+1]) {
+		case '\x50':
+			printf("FF50\n");
+			break;
+		case '\x56':
+			printf("FF56\n");
+			break;
+		case '\x41':
+			printf("FF41\n");
+			break;
+		case '\x70':
+			printf("FF70\n");
+			break;
+	}
+	return;
 }
