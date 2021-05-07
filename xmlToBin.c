@@ -9,13 +9,13 @@
 #include "serz.h"
 
 // Global vars
-map_int_t symMap; 	// symbol map
-map_int_t elemMap;	// element map
+map_int_t symImap; 	// symbol map
+map_int_t elemImap;	// element map
 recordArr rStack;	// stack of open xml elements
-FILE *outFile;
+static FILE *outFile;
 
 int xmlToBin (FILE *xmlFile, FILE *binFile) {
-	outFile = binFile;
+	outFile = binFile;		// Copy parameter to set the global var
 	void *buf = malloc(BUFSIZE);	// Buffer to store yxml parsing struct
 	char *source = NULL;		// Buffer where we will read the xml to
 
@@ -27,8 +27,8 @@ int xmlToBin (FILE *xmlFile, FILE *binFile) {
 	yxml_init(&x, buf, BUFSIZE);
 
 	// map variables
-	map_init(&symMap);
-	map_init(&elemMap);
+	map_init(&symImap);
+	map_init(&elemImap);
 
 	// user-defined types
 	elType elemType;
@@ -140,8 +140,8 @@ void WritePrelude() {
 	fwrite(prelude1, sizeof(char), sizeof(4), outFile);
 	fwrite(&prelude2, sizeof(uint32_t), 1, outFile);
 	// TODO Check for xml start element, if so write this next part of the prelude
-	fwrite(&prelude3, sizeof(uint32_t), 1, outFile);
-	fwrite(&prelude4, sizeof(char), 3, outFile);
+	//fwrite(&prelude3, sizeof(uint32_t), 1, outFile);
+	//fwrite(&prelude4, sizeof(char), 3, outFile);
 	return;
 }
 
@@ -248,7 +248,7 @@ uint16_t checkSym(char* symbol, size_t length) {
 	static int mapIter = 0;					// Value to reference the string, increments every map addition
 	static uint16_t ff = 0xFFFF;				// Prelude for not-found symbol write
 
-	int *val = map_get(&symMap, symbol);			// See if symbol is in map
+	int *val = map_get(&symImap, symbol);			// See if symbol is in map
 	if (val) { 						// If symbol match found, write that symbol
 		fwrite(val, sizeof(uint16_t), 1, outFile);
 		return *val;
@@ -256,21 +256,21 @@ uint16_t checkSym(char* symbol, size_t length) {
 		fwrite(&ff, sizeof(char), 2, outFile);		// Write prelude
 		fwrite(&length, sizeof(uint32_t), 1, outFile);	// Write symbol character length
 		fwrite(symbol, sizeof(char), length, outFile);	// Write the symbol
-		map_set(&symMap, symbol, mapIter);		// Since this was a map miss, add symbol to map
+		map_set(&symImap, symbol, mapIter);		// Since this was a map miss, add symbol to map
 		return mapIter++;
 	}
 }
 
 // checkElem takes the concatinated element name and attribute values and, if a duplicate,
-// replaces them with the line number where this element is first found.  Returns 1 if found, zero
-// if duplicate not found
+// replaces them with the line number where this element is first found.  Takes care of writing the 
+// value if a duplicate. Returns 1 if found, zero if duplicate not found
 int checkElem(yxml_t *x, char* symbol) {
-	int *val = map_get(&elemMap, symbol);
+	int *val = map_get(&elemImap, symbol);
 	if (val) {
 		fwrite(val, sizeof(uint8_t), 1, outFile);
 		return 1;
 	} else {
-		map_set(&elemMap, symbol, x->line - 1);		// Indexing of serz starts at 0, yxml a 1
+		map_set(&elemImap, symbol, x->line - 1);		// Indexing of serz starts at 0, yxml a 1
 		return 0;
 	}
 }
