@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include "map.h"
 #include "serz.h"
 
@@ -9,6 +10,7 @@ const char *binPrelude = "SERZ\x00\x00\x01\x00";
 map_str_t symSmap;	// symbol map
 map_str_t elemSmap;	// element map
 static FILE *outFile;
+static char *source = NULL;	// bin file copied into this buffer
 
 int binToXml(FILE *binFile, FILE *xmlFile) {
 	outFile = xmlFile;
@@ -16,9 +18,7 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 	map_init(&symSmap);
 	map_init(&elemSmap);
 
-	char *source = NULL;
 	source = readInfile(binFile);
-	char *sourceIter = source;	// Use original malloc pointer for free later TODO Necessary?
 
 	long fileSize = getFileSize(binFile);
 
@@ -35,6 +35,7 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 		}
 	}
 	printf("\n");
+	free(source);
 	return 0;
 }
 
@@ -52,6 +53,7 @@ void processFF(char *source, long i) {
 	switch (source[i+1]) {
 		case '\x50':
 			printf("FF50\n");
+			process50(i+4);
 			break;
 		case '\x56':
 			printf("FF56\n");
@@ -64,4 +66,13 @@ void processFF(char *source, long i) {
 			break;
 	}
 	return;
+}
+
+void process50(long i) {
+	printf("Test x: %d\n", x);
+}
+
+inline uint32_t conv32(long i) {
+	uint32_t x = (source[i] | source[i+1] << 8 | source[i+2] << 16 | source[i+3] << 24);
+	return x;
 }

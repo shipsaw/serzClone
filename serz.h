@@ -48,3 +48,4 @@ int checkPrelude(char*);
 
 // binToXml
 void processFF(char *source, long i);
+void process50(char *source, long i);
