@@ -67,16 +67,6 @@ void processFF(long i) {
 	return;
 }
 
-// Called when i is at the byte after the 0x50
-long process50(long i) {
-	fputc('<', outFile);
-	if (source[i] == '\xFF') {
-		newElemName(i+2);
-	} else {
-		// Lookup element name
-	}
-	fputs(">\n", outFile);
-}
 
 uint32_t conv32(long i) {
 	printf("%x, %x, %x, %x\n", source[i], source[i+1], source[i+2], source[i+3]);
@@ -91,6 +81,24 @@ long newElemName(long i) {
 		fputc(source[i+j], outFile);
 	}
 	i += x;
+	return i;
+}
+
+// Called when i is at the byte after the 0x50
+long process50(long i) {
+	fputc('<', outFile);
+	if (source[i] == '\xFF') {
+		i = newElemName(i+2);
+	} else {
+		// Lookup element name
+	}
+	uint32_t id = conv32(i);
+	i += 8; // Skip over rest of id and # of children bytes
+	if (id == 0) {
+		fputs(">\n", outFile);
+	} else {
+		fprintf(outFile, " d:id\"%u\">\n", id);
+	}
 	return i;
 }
 long process56(long i) {
