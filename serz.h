@@ -52,6 +52,7 @@ long newElemName(long);
 int checkPrelude();
 void processFF(long);
 uint32_t conv32(long);
+void addTabs();
 long process50(long);
 long process56(long);
 long process41(long);

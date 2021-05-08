@@ -3,7 +3,7 @@
 #include "map.h"
 #include "serz.h"
 
-const char *prolog = "<?xml version=\"1.0\" encoding=\"utf-8\"?>";
+const char *prolog = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 const char *binPrelude = "SERZ\x00\x00\x01\x00";
 
 // Global vars
@@ -11,6 +11,7 @@ map_str_t symSmap;	// symbol map
 map_str_t elemSmap;	// element map
 static FILE *outFile;
 static char *source = NULL;	// bin file copied into this buffer
+int tabPos = 0;
 
 int binToXml(FILE *binFile, FILE *xmlFile) {
 	outFile = xmlFile;
@@ -27,7 +28,8 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 		exit(1);
 	}
 
-	for (long i = 8; i < fileSize; i++) {
+	fputs(prolog, outFile);
+	for (long i = 8; i < fileSize; i++) { //TODO once all elements can be processed the i++ should not be neccessary
 		switch (source[i]) {
 			case '\xFF':
 				processFF(i);
@@ -71,7 +73,6 @@ void processFF(long i) {
 uint32_t conv32(long i) {
 	//printf("%x, %x, %x, %x\n", source[i], source[i+1], source[i+2], source[i+3]);
 	uint32_t x = ((uint8_t)source[i] | (uint8_t)source[i+1] << 8 | (uint8_t)source[i+2] << 16 | (uint8_t)source[i+3] << 24);
-	printf("%lu\n", x);
 	return x;
 }
 
@@ -88,13 +89,14 @@ long newElemName(long i) {
 
 // Called when i is at the byte after the 0x50
 long process50(long i) {
+	addTabs();
+	tabPos++;
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
 		i = newElemName(i+2);
 	} else {
 		// Lookup element name
 	}
-	printf("%x\n", source[i]);
 	uint32_t id = conv32(i);
 	i += 8; // Skip over rest of id and # of children bytes
 	if (id == 0) {
@@ -105,6 +107,7 @@ long process50(long i) {
 	return i;
 }
 long process56(long i) {
+	addTabs();
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
 		newElemName(i+2);
@@ -114,6 +117,7 @@ long process56(long i) {
 	fputs(">\n", outFile);
 }
 long process41(long i) {
+	addTabs();
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
 		newElemName(i+2);
@@ -123,11 +127,20 @@ long process41(long i) {
 	fputs(">\n", outFile);
 }
 long process70(long i) {
-	fputc('<', outFile);
+	tabPos--;
+	addTabs();
+	fputs("</", outFile);
 	if (source[i] == '\xFF') {
 		newElemName(i+2);
 	} else {
 		// Lookup element name
 	}
 	fputs(">\n", outFile);
+}
+
+void addTabs() {
+	for (int i = 0; i < tabPos; i++) {
+		fputc('\t', outFile);
+	}
+	return;
 }
