@@ -51,7 +51,7 @@ long newElemName(long);
 // binToXml
 int checkPrelude();
 void processFF(long);
-inline uint32_t conv32(long);
+uint32_t conv32(long);
 long process50(long);
 long process56(long);
 long process41(long);

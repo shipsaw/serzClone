@@ -69,8 +69,9 @@ void processFF(long i) {
 
 
 uint32_t conv32(long i) {
-	printf("%x, %x, %x, %x\n", source[i], source[i+1], source[i+2], source[i+3]);
-	uint32_t x = (source[i] | source[i+1] << 8 | source[i+2] << 16 | source[i+3] << 24);
+	//printf("%x, %x, %x, %x\n", source[i], source[i+1], source[i+2], source[i+3]);
+	uint32_t x = ((uint8_t)source[i] | (uint8_t)source[i+1] << 8 | (uint8_t)source[i+2] << 16 | (uint8_t)source[i+3] << 24);
+	printf("%lu\n", x);
 	return x;
 }
 
@@ -80,6 +81,7 @@ long newElemName(long i) {
 	for (long j = 0; j < x; j++) {
 		fputc(source[i+j], outFile);
 	}
+	long temp = i;
 	i += x;
 	return i;
 }
@@ -92,6 +94,7 @@ long process50(long i) {
 	} else {
 		// Lookup element name
 	}
+	printf("%x\n", source[i]);
 	uint32_t id = conv32(i);
 	i += 8; // Skip over rest of id and # of children bytes
 	if (id == 0) {
