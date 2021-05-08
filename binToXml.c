@@ -22,7 +22,7 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 
 	long fileSize = getFileSize(binFile);
 
-	if (checkPrelude(source) == -1) {
+	if (checkPrelude() == -1) {
 		printf("Incorrect Prelude\n");
 		exit(1);
 	}
@@ -30,7 +30,7 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 	for (long i = 8; i < fileSize; i++) {
 		switch (source[i]) {
 			case '\xFF':
-				processFF(source, i);
+				processFF(i);
 				break;
 		}
 	}
@@ -40,7 +40,7 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 }
 
 // checkPrelude checks that the binary prelude that exists at the beginning of every bin is correct
-int checkPrelude(char* source) {
+int checkPrelude() {
 	for (int i = 0; i < 8; i++) {
 		if (source[i] != binPrelude[i]) {
 			return -1;
@@ -49,30 +49,74 @@ int checkPrelude(char* source) {
 	return 1;
 }
 
-void processFF(char *source, long i) {
+void processFF(long i) {
 	switch (source[i+1]) {
 		case '\x50':
-			printf("FF50\n");
-			process50(i+4);
-			break;
-		case '\x56':
-			printf("FF56\n");
+			i = process50(i+2);
+			break; 
+		case '\x56': 
+			i = process56(i+2);
 			break;
 		case '\x41':
-			printf("FF41\n");
+			i = process41(i+2);
 			break;
 		case '\x70':
-			printf("FF70\n");
+			i = process70(i+2);
 			break;
 	}
 	return;
 }
 
-void process50(long i) {
-	printf("Test x: %d\n", x);
+// Called when i is at the byte after the 0x50
+long process50(long i) {
+	fputc('<', outFile);
+	if (source[i] == '\xFF') {
+		newElemName(i+2);
+	} else {
+		// Lookup element name
+	}
+	fputs(">\n", outFile);
 }
 
-inline uint32_t conv32(long i) {
+uint32_t conv32(long i) {
+	printf("%x, %x, %x, %x\n", source[i], source[i+1], source[i+2], source[i+3]);
 	uint32_t x = (source[i] | source[i+1] << 8 | source[i+2] << 16 | source[i+3] << 24);
 	return x;
+}
+
+long newElemName(long i) {
+	long x = conv32(i);
+	i += 4;
+	for (long j = 0; j < x; j++) {
+		fputc(source[i+j], outFile);
+	}
+	i += x;
+	return i;
+}
+long process56(long i) {
+	fputc('<', outFile);
+	if (source[i] == '\xFF') {
+		newElemName(i+2);
+	} else {
+		// Lookup element name
+	}
+	fputs(">\n", outFile);
+}
+long process41(long i) {
+	fputc('<', outFile);
+	if (source[i] == '\xFF') {
+		newElemName(i+2);
+	} else {
+		// Lookup element name
+	}
+	fputs(">\n", outFile);
+}
+long process70(long i) {
+	fputc('<', outFile);
+	if (source[i] == '\xFF') {
+		newElemName(i+2);
+	} else {
+		// Lookup element name
+	}
+	fputs(">\n", outFile);
 }

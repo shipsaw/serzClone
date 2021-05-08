@@ -41,11 +41,18 @@ int checkElem(yxml_t*, char*);
 void contWrite(char*, contType, int);
 contType contentType(char* type);
 
+// helpers.c
 char* fileType(char *filename);
 void swapFilename(char *filename);
 long getFileSize(FILE *binFile);
-int checkPrelude(char*);
+uint32_t conv32(long);
+long newElemName(long);
 
 // binToXml
-void processFF(char *source, long i);
-void process50(char *source, long i);
+int checkPrelude();
+void processFF(long);
+inline uint32_t conv32(long);
+long process50(long);
+long process56(long);
+long process41(long);
+long process70(long);
