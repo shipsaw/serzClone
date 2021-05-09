@@ -7,17 +7,14 @@ const char *prolog = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 const char *binPrelude = "SERZ\x00\x00\x01\x00";
 
 // Global vars
-map_str_t symSmap;	// symbol map
-map_str_t elemSmap;	// element map
+char *symArray[65536];		// Two byte's worth of representation
+int symArrayIdx = 0;
 static FILE *outFile;
 static char *source = NULL;	// bin file copied into this buffer
 int tabPos = 0;
 
 int binToXml(FILE *binFile, FILE *xmlFile) {
 	outFile = xmlFile;
-
-	map_init(&symSmap);
-	map_init(&elemSmap);
 
 	source = readInfile(binFile);
 
@@ -76,16 +73,29 @@ uint32_t conv32(long i) {
 	return x;
 }
 
+uint16_t conv16(long i) {
+	uint16_t x = ((uint8_t)source[i] | (uint8_t)source[i+1] << 8);
+	return x;
+}
+
+
 // Called at first FF of two that indicates new symbol
 long newSym(long i) {
+	char symbol[20];
 	long pos = i + 2;			// Advance past two FF bytes
 	long x = conv32(pos);			// 4 bytes that represent symbol length in bytes
+	char *nameElem = malloc(x + 1);		// Name string that will be stored in name array
 	pos += 4;				// Advance past symbol length bytes
-	for (long j = 0; j < x; j++) {		// Write letters to file
-		fputc(source[pos+j], outFile);
+	long j;
+	for (j = 0; j < x; j++) {		// Write letters to file
+		nameElem[j] = source[pos+j];
 	}
-	pos += x;
+	nameElem[j+1] = '\0';
+	fputs(nameElem, outFile);
+	symArray[symArrayIdx] = nameElem;
+	symArrayIdx++;
 	
+	pos += x;
 	return pos;
 }
 
@@ -110,6 +120,7 @@ long process50(long i) {
 	return i;
 	printf("end\n");
 }
+
 long process56(long i) {
 	addTabs();
 	fputc('<', outFile);
@@ -126,6 +137,7 @@ long process56(long i) {
 	}
 	fputs("\">\n", outFile);
 }
+
 long process41(long i) {
 	addTabs();
 	fputc('<', outFile);
@@ -136,6 +148,7 @@ long process41(long i) {
 	}
 	fputs(">\n", outFile);
 }
+
 long process70(long i) {
 	tabPos--;
 	addTabs();
@@ -143,7 +156,9 @@ long process70(long i) {
 	if (source[i] == '\xFF') {
 		newSym(i);
 	} else {
-		// Lookup element name
+		int arrIdx = conv16(i);
+		i += 2;
+		fputs(symArray[arrIdx], outFile);
 	}
 	fputs(">\n", outFile);
 }
