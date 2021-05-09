@@ -108,7 +108,9 @@ long process50(long i) {
 	if (source[i] == '\xFF') {
 		i = newSym(i);
 	} else {
-		// Lookup element name
+		int arrIdx = conv16(i);
+		i += 2;
+		fputs(symArray[arrIdx], outFile);
 	}
 	uint32_t id = conv32(i);
 	i += 8; // Skip over rest of id and # of children bytes
@@ -127,13 +129,17 @@ long process56(long i) {
 	if (source[i] == '\xFF') {
 		i = newSym(i);
 	} else {
-		// Lookup element name
+		int arrIdx = conv16(i);
+		i += 2;
+		fputs(symArray[arrIdx], outFile);
 	}
 	fprintf(outFile, " d:type=\"");
 	if (source[i] == '\xFF') {
 		i = newSym(i);
 	} else {
-		// Lookup property name
+		int arrIdx = conv16(i);
+		i += 2;
+		fputs(symArray[arrIdx], outFile);
 	}
 	fputs("\">\n", outFile);
 }
@@ -144,7 +150,9 @@ long process41(long i) {
 	if (source[i] == '\xFF') {
 		newSym(i);
 	} else {
-		// Lookup element name
+		int arrIdx = conv16(i);
+		i += 2;
+		fputs(symArray[arrIdx], outFile);
 	}
 	fputs(">\n", outFile);
 }
