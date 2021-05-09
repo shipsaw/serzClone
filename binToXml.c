@@ -76,24 +76,27 @@ uint32_t conv32(long i) {
 	return x;
 }
 
-long newElemName(long i) {
-	long x = conv32(i);
-	i += 4;
-	for (long j = 0; j < x; j++) {
-		fputc(source[i+j], outFile);
+// Called at first FF of two that indicates new symbol
+long newSym(long i) {
+	long pos = i + 2;			// Advance past two FF bytes
+	long x = conv32(pos);			// 4 bytes that represent symbol length in bytes
+	pos += 4;				// Advance past symbol length bytes
+	for (long j = 0; j < x; j++) {		// Write letters to file
+		fputc(source[pos+j], outFile);
 	}
-	long temp = i;
-	i += x;
-	return i;
+	pos += x;
+	
+	return pos;
 }
 
 // Called when i is at the byte after the 0x50
 long process50(long i) {
+	printf("50..");
 	addTabs();
 	tabPos++;
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
-		i = newElemName(i+2);
+		i = newSym(i);
 	} else {
 		// Lookup element name
 	}
@@ -102,25 +105,32 @@ long process50(long i) {
 	if (id == 0) {
 		fputs(">\n", outFile);
 	} else {
-		fprintf(outFile, " d:id\"%u\">\n", id);
+		fprintf(outFile, " d:id=\"%u\">\n", id);
 	}
 	return i;
+	printf("end\n");
 }
 long process56(long i) {
 	addTabs();
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
-		newElemName(i+2);
+		i = newSym(i);
 	} else {
 		// Lookup element name
 	}
-	fputs(">\n", outFile);
+	fprintf(outFile, " d:type=\"");
+	if (source[i] == '\xFF') {
+		i = newSym(i);
+	} else {
+		// Lookup property name
+	}
+	fputs("\">\n", outFile);
 }
 long process41(long i) {
 	addTabs();
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
-		newElemName(i+2);
+		newSym(i);
 	} else {
 		// Lookup element name
 	}
@@ -131,7 +141,7 @@ long process70(long i) {
 	addTabs();
 	fputs("</", outFile);
 	if (source[i] == '\xFF') {
-		newElemName(i+2);
+		newSym(i);
 	} else {
 		// Lookup element name
 	}
