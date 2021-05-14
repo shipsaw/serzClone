@@ -8,7 +8,7 @@ const char *binPrelude = "SERZ\x00\x00\x01\x00";
 
 // Global vars
 char *symArray[65536];		// Two byte's worth of representation
-int symArrayIdx = 0;
+uint16_t symArrayIdx = 0;
 uint32_t elemArray[256];	// One byte's worth of representation, uint32 because two 16-bit symbol references
 int linenum = 0;		// how element array is referenced
 
@@ -67,6 +67,7 @@ void processFF(long i) {
 			process70(&i);
 			break;
 	}
+	linenum++;
 	return;
 }
 
@@ -84,7 +85,7 @@ uint16_t conv16(long i) {
 
 
 // Called at first FF of two that indicates new symbol
-void newSym(long *i) {
+uint16_t newSym(long *i) {
 	char symbol[20];
 	*i += 2;				// Advance past two FF bytes
 	long x = conv32(*i);			// 4 bytes that represent symbol length in bytes
@@ -100,7 +101,7 @@ void newSym(long *i) {
 	symArrayIdx++;
 	
 	*i += x;
-	return;
+	return symArrayIdx;
 }
 
 // Called when i is at the byte after the 0x50

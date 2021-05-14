@@ -47,7 +47,7 @@ void swapFilename(char *filename);
 long getFileSize(FILE *binFile);
 uint32_t conv32(long);
 uint16_t conv16(long i);
-void newSym(long*);
+uint16_t newSym(long*);
 
 // binToXml
 int checkPrelude();
