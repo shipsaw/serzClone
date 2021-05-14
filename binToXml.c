@@ -51,6 +51,7 @@ int checkPrelude() {
 	return 1;
 }
 
+// ProcessFF is called at the first of the two \xFF's that define the element type
 void processFF(long i) {
 	i += 2;
 	switch (source[i-1]) {
@@ -72,12 +73,14 @@ void processFF(long i) {
 }
 
 
+// conv32 converts 4 bytes in sequence (little-endian) into a uint32_t value
 uint32_t conv32(long i) {
 	//printf("%x, %x, %x, %x\n", source[i], source[i+1], source[i+2], source[i+3]);
 	uint32_t x = ((uint8_t)source[i] | (uint8_t)source[i+1] << 8 | (uint8_t)source[i+2] << 16 | (uint8_t)source[i+3] << 24);
 	return x;
 }
 
+// conv16 converts 2 bytes in sequence (little-endian) into a uint16_t value
 uint16_t conv16(long i) {
 	uint16_t x = ((uint8_t)source[i] | (uint8_t)source[i+1] << 8);
 	return x;
@@ -104,14 +107,22 @@ uint16_t newSym(long *i) {
 	return symArrayIdx;
 }
 
-// Called when i is at the byte after the 0x50
+// newElem takes the 16-bit symbol array values for the name and attribute, concatinating them into a 32-bit
+// value that can be stored to save the element signiture 
+uint32_t newElem(uint16_t nameSym, uint16_t attrSym) {
+	uint32_t elemKey = nameSym << 8 | attrSym;
+	printf("ElemKey = %04X\n", elemKey);
+	return elemKey;
+	}
+
+// process50 is called when i is at the byte after the 0x50, and handles writing an FF50 element to the output file
 void process50(long *i) {
-	printf("50..");
+	uint16_t nameSym, attrSym = 0;
 	addTabs();
 	tabPos++;
 	fputc('<', outFile);
 	if (source[*i] == '\xFF') {
-		newSym(i);
+		nameSym = newSym(i);
 	} else {
 		int arrIdx = conv16(*i);
 		*i += 2;
@@ -124,14 +135,16 @@ void process50(long *i) {
 	} else {
 		fprintf(outFile, " d:id=\"%u\">\n", id);
 	}
+	newElem(nameSym, attrSym);
 	return;
 }
 
 void process56(long *i) {
 	addTabs();
+	uint16_t nameSym, attrSym;
 	fputc('<', outFile);
 	if (source[*i] == '\xFF') {
-		newSym(i);
+		nameSym = newSym(i);
 	} else {
 		int arrIdx = conv16(*i);
 		*i += 2;
@@ -139,40 +152,46 @@ void process56(long *i) {
 	}
 	fprintf(outFile, " d:type=\"");
 	if (source[*i] == '\xFF') {
-		newSym(i);
+		attrSym = newSym(i);
 	} else {
 		int arrIdx = conv16(*i);
 		*i += 2;
 		fputs(symArray[arrIdx], outFile);
 	}
+	newElem(nameSym, attrSym);
 	fputs("\">\n", outFile);
 }
 
 void process41(long *i) {
 	addTabs();
+	uint16_t nameSym, attrSym = 0;		// TODO get attribute symbol
 	fputc('<', outFile);
 	if (source[*i] == '\xFF') {
-		newSym(i);
+		nameSym = newSym(i);
 	} else {
 		int arrIdx = conv16(*i);
 		*i += 2;
 		fputs(symArray[arrIdx], outFile);
 	}
 	fputs(">\n", outFile);
+	newElem(nameSym, attrSym);
+	return;
 }
 
 void process70(long *i) {
 	tabPos--;
+	uint16_t nameSym = 0, attrSym = 0;
 	addTabs();
 	fputs("</", outFile);
 	if (source[*i] == '\xFF') {
-		newSym(i);
+		nameSym = newSym(i);
 	} else {
 		int arrIdx = conv16(*i);
 		*i += 2;
 		fputs(symArray[arrIdx], outFile);
 	}
 	fputs(">\n", outFile);
+	newElem(nameSym, attrSym);
 }
 
 void addTabs() {

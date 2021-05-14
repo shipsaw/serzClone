@@ -48,6 +48,7 @@ long getFileSize(FILE *binFile);
 uint32_t conv32(long);
 uint16_t conv16(long i);
 uint16_t newSym(long*);
+uint32_t newElem(uint16_t, uint16_t);
 
 // binToXml
 int checkPrelude();
