@@ -83,23 +83,23 @@ uint16_t conv16(long i) {
 
 
 // Called at first FF of two that indicates new symbol
-long newSym(long i) {
+void newSym(long *i) {
 	char symbol[20];
-	long pos = i + 2;			// Advance past two FF bytes
-	long x = conv32(pos);			// 4 bytes that represent symbol length in bytes
+	*i += 2;				// Advance past two FF bytes
+	long x = conv32(*i);			// 4 bytes that represent symbol length in bytes
 	char *nameElem = malloc(x + 1);		// Name string that will be stored in name array
-	pos += 4;				// Advance past symbol length bytes
+	*i += 4;				// Advance past symbol length bytes
 	long j;
 	for (j = 0; j < x; j++) {		// Write letters to file
-		nameElem[j] = source[pos+j];
+		nameElem[j] = source[*i+j];
 	}
 	nameElem[j+1] = '\0';
 	fputs(nameElem, outFile);
 	symArray[symArrayIdx] = nameElem;
 	symArrayIdx++;
 	
-	pos += x;
-	return pos;
+	*i += x;
+	return;
 }
 
 // Called when i is at the byte after the 0x50
@@ -109,7 +109,7 @@ long process50(long i) {
 	tabPos++;
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
-		i = newSym(i);
+		newSym(&i);
 	} else {
 		int arrIdx = conv16(i);
 		i += 2;
@@ -130,7 +130,7 @@ long process56(long i) {
 	addTabs();
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
-		i = newSym(i);
+		newSym(&i);
 	} else {
 		int arrIdx = conv16(i);
 		i += 2;
@@ -138,7 +138,7 @@ long process56(long i) {
 	}
 	fprintf(outFile, " d:type=\"");
 	if (source[i] == '\xFF') {
-		i = newSym(i);
+		newSym(&i);
 	} else {
 		int arrIdx = conv16(i);
 		i += 2;
@@ -151,7 +151,7 @@ long process41(long i) {
 	addTabs();
 	fputc('<', outFile);
 	if (source[i] == '\xFF') {
-		newSym(i);
+		newSym(&i);
 	} else {
 		int arrIdx = conv16(i);
 		i += 2;
@@ -165,7 +165,7 @@ long process70(long i) {
 	addTabs();
 	fputs("</", outFile);
 	if (source[i] == '\xFF') {
-		newSym(i);
+		newSym(&i);
 	} else {
 		int arrIdx = conv16(i);
 		i += 2;
