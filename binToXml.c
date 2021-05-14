@@ -52,18 +52,19 @@ int checkPrelude() {
 }
 
 void processFF(long i) {
-	switch (source[i+1]) {
+	i += 2;
+	switch (source[i-1]) {
 		case '\x50':
-			i = process50(i+2);
+			process50(&i);
 			break; 
 		case '\x56': 
-			i = process56(i+2);
+			process56(&i);
 			break;
 		case '\x41':
-			i = process41(i+2);
+			process41(&i);
 			break;
 		case '\x70':
-			i = process70(i+2);
+			process70(&i);
 			break;
 	}
 	return;
@@ -103,72 +104,71 @@ void newSym(long *i) {
 }
 
 // Called when i is at the byte after the 0x50
-long process50(long i) {
+void process50(long *i) {
 	printf("50..");
 	addTabs();
 	tabPos++;
 	fputc('<', outFile);
-	if (source[i] == '\xFF') {
-		newSym(&i);
+	if (source[*i] == '\xFF') {
+		newSym(i);
 	} else {
-		int arrIdx = conv16(i);
-		i += 2;
+		int arrIdx = conv16(*i);
+		*i += 2;
 		fputs(symArray[arrIdx], outFile);
 	}
-	uint32_t id = conv32(i);
-	i += 8; // Skip over rest of id and # of children bytes
+	uint32_t id = conv32(*i);
+	*i += 8; // Skip over rest of id and # of children bytes
 	if (id == 0) {
 		fputs(">\n", outFile);
 	} else {
 		fprintf(outFile, " d:id=\"%u\">\n", id);
 	}
-	return i;
-	printf("end\n");
+	return;
 }
 
-long process56(long i) {
+void process56(long *i) {
 	addTabs();
 	fputc('<', outFile);
-	if (source[i] == '\xFF') {
-		newSym(&i);
+	if (source[*i] == '\xFF') {
+		newSym(i);
 	} else {
-		int arrIdx = conv16(i);
-		i += 2;
+		int arrIdx = conv16(*i);
+		*i += 2;
 		fputs(symArray[arrIdx], outFile);
 	}
 	fprintf(outFile, " d:type=\"");
-	if (source[i] == '\xFF') {
-		newSym(&i);
+	if (source[*i] == '\xFF') {
+		newSym(i);
 	} else {
-		int arrIdx = conv16(i);
-		i += 2;
+		int arrIdx = conv16(*i);
+		*i += 2;
 		fputs(symArray[arrIdx], outFile);
 	}
 	fputs("\">\n", outFile);
 }
 
-long process41(long i) {
+void process41(long *i) {
 	addTabs();
 	fputc('<', outFile);
-	if (source[i] == '\xFF') {
-		newSym(&i);
+	if (source[*i] == '\xFF') {
+		newSym(i);
 	} else {
-		int arrIdx = conv16(i);
-		i += 2;
+		int arrIdx = conv16(*i);
+		*i += 2;
 		fputs(symArray[arrIdx], outFile);
 	}
 	fputs(">\n", outFile);
 }
 
-long process70(long i) {
+void process70(long *i) {
 	tabPos--;
 	addTabs();
 	fputs("</", outFile);
-	if (source[i] == '\xFF') {
-		newSym(&i);
+	if (source[*i] == '\xFF') {
+		newSym(i);
 	} else {
-		int arrIdx = conv16(i);
-		i += 2;
+		int arrIdx = conv16(*i);
+		*i += 2;
 		fputs(symArray[arrIdx], outFile);
 	}
 	fputs(">\n", outFile);
