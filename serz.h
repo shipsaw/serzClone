@@ -19,6 +19,22 @@ typedef struct {
 	uint16_t idx;		// Does double duty as array index and FF70 return address
 } recordArr;
 
+// For binToXml, allows passing around of file status
+typedef struct {
+	long i; 		// Char position in bin file
+	int tabPos;
+	FILE *outFile;	// xml output file
+	char *source;  //  input xml file copied into this buffer
+} fileStatus;
+
+// For binToXml, allows passing around of symbol maps
+typedef struct {
+	char *symArray[65536];
+	uint16_t symArrayIdx;
+	uint32_t elemArray[256];
+	int linenum;
+} symbolMaps;
+
 typedef enum {ElemOpen, ElemClose, Other} elType ;					// Used to track enums we care about while ignoring others
 typedef enum {boolean, sUInt8, sInt32, sFloat32, sUInt64, cDeltaString} contType ;	// Content type
 
@@ -45,17 +61,16 @@ contType contentType(char* type);
 char* fileType(char *filename);
 void swapFilename(char *filename);
 long getFileSize(FILE *binFile);
-uint32_t conv32(long);
-uint16_t conv16(long i);
-uint16_t newSym(long*);
+uint32_t conv32(char*);
+uint16_t conv16(char*);
 uint32_t newElem(uint16_t, uint16_t);
 
 // binToXml
-int checkPrelude();
-void processFF(long);
-uint32_t conv32(long);
-void addTabs();
-void process50(long*);
-void process56(long*);
-void process41(long*);
-void process70(long*);
+int checkPrelude(fileStatus*);
+void processFF(fileStatus*, symbolMaps*);
+uint16_t newSym(fileStatus*, symbolMaps*);
+void addTabs(fileStatus*);
+void process50(fileStatus*, symbolMaps*);
+void process56(fileStatus*, symbolMaps*);
+void process41(fileStatus*, symbolMaps*);
+void process70(fileStatus*, symbolMaps*);
