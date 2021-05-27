@@ -6,20 +6,6 @@
 const char *prolog = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 const char *binPrelude = "SERZ\x00\x00\x01\x00";
 
-// Global vars
-/*
-char *symArray[65536];		// Two byte's worth of representation
-uint16_t symArrayIdx = 0;
-uint32_t elemArray[256];	// One byte's worth of representation, uint32 because two 16-bit symbol references
-int linenum = 0;		// how element array is referenced
-*/
-
-//static FILE *outFile;
-//static char *source = NULL;	// bin file copied into this buffer
-//int tabPos = 0;
-
-
-
 int binToXml(FILE *binFile, FILE *xmlFile) {
 	fileStatus fs;
 	symbolMaps sm;
@@ -27,16 +13,16 @@ int binToXml(FILE *binFile, FILE *xmlFile) {
 	fs.source = readInfile(binFile);
 
 
-	if (checkPrelude(&fs) == -1) {
+	if (checkPrelude(&fs) == -1) {			// Check that the binary file has the correct "SERZ" prelude
 		printf("Incorrect Prelude\n");
 		exit(1);
 	}
-	fputs(prolog, fs.outFile);
+	fputs(prolog, fs.outFile);				// Write the xml prolog to the output file
 
 	long fileSize = getFileSize(binFile);
-	for (long i = 8; i < fileSize; i++) { //TODO once all elements can be processed the i++ should not be neccessary
+	for (long i = 8; i < fileSize; i++) { 	//TODO once all elements can be processed the i++ should not be neccessary
 		switch (fs.source[i]) {
-			case '\xFF':
+			case '\xFF':					//TODO update, eventually we shouldn't need to look for FF's
 				fs.i = i;
 				processFF(&fs, &sm);
 				break;
@@ -59,8 +45,8 @@ int checkPrelude(fileStatus *fs) {
 
 // ProcessFF is called at the first of the two \xFF's that define the element type
 void processFF(fileStatus *fs, symbolMaps *sm) {
-	fs->i += 2;
-	switch (fs->source[fs->i-1]) {
+	fs->i++;							// Move from the FF to the element type byte
+	switch (fs->source[fs->i]) {		
 		case '\x50':
 			process50(fs, sm);
 			break; 
@@ -81,12 +67,12 @@ void processFF(fileStatus *fs, symbolMaps *sm) {
 // Called at first FF of two that indicates new symbol
 uint16_t newSym(fileStatus *fs, symbolMaps *sm) {
 	char symbol[20];
-	fs->i += 2;				// Advance past two FF bytes
+	fs->i += 2;									// Advance past two FF bytes
 	long x = conv32(fs->source[fs->i]);			// 4 bytes that represent symbol length in bytes
-	char *nameElem = malloc(x + 1);		// Name string that will be stored in name array
-	fs->i += 4;				// Advance past symbol length bytes
+	char *nameElem = malloc(x + 1);				// Name string that will be stored in name array
+	fs->i += 4;									// Advance past symbol length bytes
 	long j;
-	for (j = 0; j < x; j++) {		// Write letters to file
+	for (j = 0; j < x; j++) {					// Write letters to file
 		nameElem[j] = fs->source[fs->i+j];
 	}
 	nameElem[j+1] = '\0';
@@ -106,17 +92,17 @@ uint32_t newElem(uint16_t nameSym, uint16_t attrSym) {
 	return elemKey;
 	}
 
-// process50 is called when i is at the byte after the 0x50, and handles writing an FF50 element to the output file
+// process50 is called when i is at the 0x50, and handles writing an FF50 element to the output file
 void process50(fileStatus *fs, symbolMaps *sm) {
-	uint16_t nameSym, attrSym = 0;
+	uint16_t nameSym, attrSym = 0;					// 16-bit references to the symbol array
 	addTabs(fs);
-	fs->tabPos++;
-	fputc('<', fs->outFile);
-	if (fs->source[fs->i] == '\xFF') {
-		nameSym = newSym(fs, sm);
-	} else {
-		int arrIdx = conv16(fs->source[fs->i]);
-		fs->i += 2;
+	fs->tabPos++;									// Increment the tab count, because 0x50 always has children
+	fputc('<', fs->outFile);						// Write opening < char of element
+	if (fs->source[fs->i++] == '\xFF') {			// If the byte after 0x50 is FF, this is a new symbol
+		nameSym = newSym(fs, sm);					// Save this new symbol in the table, return it's reference number
+	} else {										// If the symbol already exists in the symbol array
+		int arrIdx = conv16(fs->source[fs->i]);		
+		fs->i += 2;									 
 		fputs(sm->symArray[arrIdx], fs->outFile);
 	}
 	uint32_t id = conv32(fs->source[fs->i]);
