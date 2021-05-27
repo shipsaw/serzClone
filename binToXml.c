@@ -98,21 +98,21 @@ void process50(fileStatus *fs, symbolMaps *sm) {
 	addTabs(fs);
 	fs->tabPos++;									// Increment the tab count, because 0x50 always has children
 	fputc('<', fs->outFile);						// Write opening < char of element
-	if (fs->source[fs->i++] == '\xFF') {			// If the byte after 0x50 is FF, this is a new symbol
+	if (fs->source[fs->++i] == '\xFF') {			// If the byte after 0x50 is FF, this is a new symbol
 		nameSym = newSym(fs, sm);					// Save this new symbol in the table, return it's reference number
 	} else {										// If the symbol already exists in the symbol array
 		int arrIdx = conv16(fs->source[fs->i]);		
-		fs->i += 2;									 
-		fputs(sm->symArray[arrIdx], fs->outFile);
+		fs->i += 2;									// Move past 16-bit symbol array key 
+		fputs(sm->symArray[arrIdx], fs->outFile);	// Write the value at the symbol array to the xml file
 	}
-	uint32_t id = conv32(fs->source[fs->i]);
-	fs->i += 8; // Skip over rest of id and # of children bytes
-	if (id == 0) {
+	uint32_t id = conv32(fs->source[fs->i]);		// convert d:id attribute value to int
+	fs->i += 8; 									// Skip over rest of d:id attribute and # of children bytes
+	if (id == 0) {									// If zero value of d:id attribute, nothing is written
 		fputs(">\n", fs->outFile);
-	} else {
+	} else {										// Else, write d:id and attribute value
 		fprintf(fs->outFile, " d:id=\"%u\">\n", id);
 	}
-	newElem(nameSym, attrSym);
+	newElem(nameSym, attrSym);						// Save line in elemArray if < 255
 	return;
 }
 
@@ -120,7 +120,7 @@ void process56(fileStatus *fs, symbolMaps *sm) {
 	addTabs(fs);
 	uint16_t nameSym, attrSym;
 	fputc('<', fs->outFile);
-	if (fs->source[fs->i] == '\xFF') {
+	if (fs->source[fs->++i] == '\xFF') {
 		nameSym = newSym(fs, sm);
 	} else {
 		int arrIdx = conv16(fs->source[fs->i]);
@@ -143,7 +143,7 @@ void process41(fileStatus *fs, symbolMaps *sm) {
 	addTabs(fs);
 	uint16_t nameSym, attrSym = 0;		// TODO get attribute symbol
 	fputc('<', fs->outFile);
-	if (fs->source[fs->i] == '\xFF') {
+	if (fs->source[fs->++i] == '\xFF') {
 		nameSym = newSym(fs, sm);
 	} else {
 		int arrIdx = conv16(fs->source[fs->i]);
@@ -160,7 +160,7 @@ void process70(fileStatus *fs, symbolMaps *sm) {
 	uint16_t nameSym = 0, attrSym = 0;
 	addTabs(fs);
 	fputs("</", fs->outFile);
-	if (fs->source[fs->i] == '\xFF') {
+	if (fs->source[fs->++i] == '\xFF') {
 		nameSym = newSym(fs, sm);
 	} else {
 		int arrIdx = conv16(fs->source[fs->i]);
