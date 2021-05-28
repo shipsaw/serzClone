@@ -7,6 +7,8 @@
 const char *prolog = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 const char *binPrelude = "SERZ\x00\x00\x01\x00";
 
+enum ElementType {Parent, Child, Closing};
+
 int binToXml(FILE *binFile, FILE *xmlFile)
 {
 	fileStatus fs;
@@ -15,11 +17,11 @@ int binToXml(FILE *binFile, FILE *xmlFile)
 	fs.source = readInfile(binFile);
 
 	if (checkPrelude(&fs) == -1)
-	{ // Check that the binary file has the correct "SERZ" prelude
+	{ 
 		printf("Incorrect Prelude\n");
 		exit(1);
-	}
-	fputs(prolog, fs.outFile); // Write the xml prolog to the output file
+	} else
+		fputs(prolog, fs.outFile); 
 
 	long fileSize = getFileSize(binFile);
 	for (long i = 8; i < fileSize; i++)
@@ -41,12 +43,9 @@ int binToXml(FILE *binFile, FILE *xmlFile)
 int checkPrelude(fileStatus *fs)
 {
 	for (int i = 0; i < 8; i++)
-	{
 		if (fs->source[i] != binPrelude[i])
-		{
 			return -1;
-		}
-	}
+
 	return 1;
 }
 
@@ -82,14 +81,10 @@ void process50(fileStatus *fs, symbolMaps *sm)
 
 	uint32_t id = conv32(fs); // convert d:id attribute value to int
 	fs->i += 4;				  // Skip over # of children bytes
-	if (id == 0)
-	{ // If zero value of d:id attribute, nothing is written
+	if (id == 0)				// If zero value of d:id attribute, nothing is written
 		fputs(">\n", fs->outFile);
-	}
-	else
-	{ // Else, write d:id and attribute value
+	else						// Else, write d:id and attribute value
 		fprintf(fs->outFile, " d:id=\"%u\">\n", id);
-	}
 
 	newElem(nameSym, attrSym); // Save line in elemArray if < 255
 	return;
@@ -104,9 +99,7 @@ void process56(fileStatus *fs, symbolMaps *sm)
 
 	fprintf(fs->outFile, " d:type=\"");
 	if (fs->source[fs->i] == '\xFF')
-	{
 		attrSym = newSym(fs, sm);
-	}
 	else
 	{
 		int arrIdx = conv16(fs);
@@ -131,7 +124,7 @@ void process41(fileStatus *fs, symbolMaps *sm)
 
 void process70(fileStatus *fs, symbolMaps *sm)
 {
-	fs->tabPos--;
+	//fs->tabPos--;			TODO: Make sure in writeElemBegin we are able to subtract a tab
 	uint16_t nameSym = 0, attrSym = 0;
 	addTabs(fs);
 	fputs("</", fs->outFile);
@@ -145,9 +138,8 @@ void process70(fileStatus *fs, symbolMaps *sm)
 void addTabs(fileStatus *fs)
 {
 	for (int i = 0; i < fs->tabPos; i++)
-	{
 		fputc('\t', fs->outFile);
-	}
+
 	return;
 }
 
@@ -157,6 +149,8 @@ void writeElemBegin(fileStatus *fs, bool hasChildren)
 	if (hasChildren)
 		fs->tabPos++;		 // Increment the tab count, because 0x50 always has children
 	fputc('<', fs->outFile); // Write opening < char of element
+
+	return;
 }
 
 void lookupNameSymbol(fileStatus *fs, symbolMaps *sm)
@@ -165,9 +159,7 @@ void lookupNameSymbol(fileStatus *fs, symbolMaps *sm)
 	writeElemBegin(fs, true);
 	fs->i++;
 	if (fs->source[fs->i] == '\xFF')
-	{							  			// If the byte after 0x50 is FF, this is a new symbol
 		nameSym = newSym(fs, sm); 			// Save this new symbol in the table, return it's reference number
-	}
 	else
 	{ 										// If the symbol already exists in the symbol array
 		int arrIdx = conv16(fs);
@@ -193,11 +185,9 @@ uint16_t newSym(fileStatus *fs, symbolMaps *sm)
 	char *nameElem = malloc(x + 1); // Name string that will be stored in name array
 	long j;
 	for (j = 0; j < x; j++)
-	{ // Copy letters from source to temp array
 		nameElem[j] = fs->source[fs->i + j];
-	}
-	nameElem[j + 1] = '\0'; // Add null terminator to string
 
+	nameElem[j + 1] = '\0'; // Add null terminator to string
 	fputs(nameElem, fs->outFile); // Write the word to the outFile
 	fs->i += x;					  // Increment i the length of the word
 
