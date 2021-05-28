@@ -93,15 +93,21 @@ long getFileSize(FILE *binFile) {
 }
 
 // conv32 converts 4 bytes in sequence (little-endian) into a uint32_t value
-uint32_t conv32(char *bytes) {
+uint32_t conv32(fileStatus *fs) {
+	char *src = fs->source;
+	long i = fs->i;
 	//printf("%x, %x, %x, %x\n", source[i], source[i+1], source[i+2], source[i+3]);
-	uint32_t x = ((uint8_t)bytes[0] | (uint8_t)bytes[1] << 8 | (uint8_t)bytes[2] << 16 | (uint8_t)bytes[3] << 24);
+	uint32_t x = ((uint8_t)src[i] | (uint8_t)src[i+1] << 8 | (uint8_t)src[i+2] << 16 | (uint8_t)src[i+3] << 24);
+	fs->i += 4;
 	return x;
 }
 
 // conv16 converts 2 bytes in sequence (little-endian) into a uint16_t value
-uint16_t conv16(char *bytes) {
-	uint16_t x = ((uint8_t)bytes[0] | (uint8_t)bytes[1] << 8);
+uint16_t conv16(fileStatus *fs) {
+	char *src = fs->source;
+	long i = fs->i;
+	uint16_t x = ((uint8_t)src[i] | (uint8_t)src[i+1] << 8);
+	fs->i += 2;
 	return x;
 }
 

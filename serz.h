@@ -5,6 +5,7 @@
 
 #include"yxml.h"
 #include<stdio.h>
+#include<stdbool.h>
 
 #define BUFSIZE 4096
 
@@ -61,15 +62,17 @@ contType contentType(char* type);
 char* fileType(char *filename);
 void swapFilename(char *filename);
 long getFileSize(FILE *binFile);
-uint32_t conv32(char*);
-uint16_t conv16(char*);
-uint32_t newElem(uint16_t, uint16_t);
+uint32_t conv32(fileStatus*);
+uint16_t conv16(fileStatus*);
 
 // binToXml
 int checkPrelude(fileStatus*);
 void processFF(fileStatus*, symbolMaps*);
 uint16_t newSym(fileStatus*, symbolMaps*);
 void addTabs(fileStatus*);
+void writeElemBegin(fileStatus*, bool hasChildren);
+void lookupNameSymbol(fileStatus*, symbolMaps*);
+uint32_t newElem(uint16_t, uint16_t);
 void process50(fileStatus*, symbolMaps*);
 void process56(fileStatus*, symbolMaps*);
 void process41(fileStatus*, symbolMaps*);
